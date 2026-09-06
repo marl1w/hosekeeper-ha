@@ -1,0 +1,515 @@
+{
+  "config": {
+    "step": {
+      "lawn": {
+        "title": "Il prato",
+        "description": "Il tappeto erboso nel suo insieme. Dove si trova, su che terreno, che specie ci cresce e come è stato impiantato; poi, nei due passaggi successivi, che cosa lo irriga e da dove si legge il meteo. Ogni zona si aggiunge dopo, con la sua superficie, la sua esposizione e la sua elettrovalvola.",
+        "data": {
+          "name": "Nome",
+          "location": "Posizione",
+          "soil_type": "Terreno",
+          "grass_type": "Specie o miscuglio",
+          "establishment_method": "Tipo di impianto",
+          "establishment_date": "Data di impianto"
+        },
+        "data_description": {
+          "location": "Determina il percorso del sole e la zona climatica. Se non indicata, è la posizione di casa.",
+          "soil_type": "Prova della manciata: stringi un pugno di terra umida. Se si sbriciola è sabbioso, se forma un nastro è argilloso, se tiene la forma e si sgrana è di medio impasto.",
+          "grass_type": "Scegli la specie prevalente o il tipo di miscuglio. Nei climi temperati i miscugli da giardino sono di microterme (festuca, loietto, poa).",
+          "establishment_method": "Il prato in zolle radica in poche settimane, quello da semina in una stagione: il programma del primo anno cambia di conseguenza.",
+          "establishment_date": "Lascia vuoto se il tappeto erboso ha più di un paio d'anni."
+        }
+      },
+      "irrigation": {
+        "title": "Irrigazione",
+        "description": "Come viene distribuita l'acqua. Con questi dati Hosekeeper converte i minuti in millimetri, così i consigli sono espressi nell'unità che il programmatore capisce.",
+        "data": {
+          "irrigation_type": "Tipo di impianto irriguo",
+          "flow_l_min": "Portata",
+          "precipitation_rate_mm_h": "Pluviometria dell'impianto"
+        },
+        "data_description": {
+          "flow_l_min": "Litri al minuto erogati sull'intera superficie. Leggila dal contatore durante un ciclo oppure somma la portata nominale degli irrigatori.",
+          "precipitation_rate_mm_h": "Se l'hai misurata con il test dei bicchieri (pluviometri), ha la precedenza sulla portata."
+        }
+      },
+      "sources": {
+        "title": "Meteo e sensori",
+        "description": "La previsione meteo è obbligatoria. Tutto il resto è facoltativo e, quando presente, sostituisce la stima della previsione con il dato misurato in loco.",
+        "data": {
+          "weather_entity": "Previsioni meteo",
+          "rain_sensor": "Pioggia giornaliera",
+          "temperature_sensor": "Temperatura",
+          "humidity_sensor": "Umidità",
+          "wind_sensor": "Vento",
+          "solar_sensor": "Radiazione solare",
+          "soil_moisture_sensor": "Umidità del suolo",
+          "mower_entity": "Robot rasaerba",
+          "deck_min_mm": "Altezza di taglio minima",
+          "deck_max_mm": "Altezza di taglio massima",
+          "robot_cadence": "Frequenza dei passaggi del robot"
+        },
+        "data_description": {
+          "rain_sensor": "Un totale giornaliero che si azzera a mezzanotte oppure un totale progressivo: vanno bene entrambi.",
+          "solar_sensor": "Insieme a umidità e vento permette di calcolare l'evapotraspirazione con il metodo completo FAO-56 Penman-Monteith.",
+          "mower_entity": "Ogni ciclo di lavoro del robot viene registrato come un taglio.",
+          "deck_min_mm": "Facoltative, ma vanno indicate entrambe: l'escursione del piatto o della regolazione del rasaerba. I consigli restano dentro questo intervallo, così a un robot che arriva a 60 mm non viene mai chiesto un taglio a 75.",
+          "robot_cadence": "Ogni passaggio tiene il prato occupato e ripassa sempre le stesse tracce: una frequenza più bassa lo lascia tranquillo tra un taglio e l'altro. Ignorata se non c'è un robot."
+        }
+      }
+    },
+    "error": {
+      "flow_required": "Inserisci una portata o una pluviometria, oppure scegli nessun impianto.",
+      "duplicate_source": "La stessa entità è selezionata due volte: ogni sensore può fornire una sola grandezza.",
+      "deck_reversed": "L'altezza minima è maggiore della massima."
+    },
+    "abort": {
+      "already_configured": "Un tappeto erboso con questo nome è già configurato.",
+      "reconfigure_successful": "Tappeto erboso aggiornato."
+    }
+  },
+  "selector": {
+    "exposure": {
+      "options": {
+        "full_sun": "Pieno sole",
+        "partial_shade": "Mezz'ombra",
+        "shade": "Ombra"
+      }
+    },
+    "soil_type": {
+      "options": {
+        "sandy": "Sabbioso",
+        "sandy_loam": "Franco sabbioso",
+        "loam": "Franco (medio impasto)",
+        "clay_loam": "Franco argilloso",
+        "clay": "Argilloso"
+      }
+    },
+    "grass_type": {
+      "options": {
+        "cool_season_mix": "Miscuglio di microterme",
+        "tall_fescue": "Festuca arundinacea",
+        "perennial_ryegrass": "Loietto perenne",
+        "kentucky_bluegrass": "Poa pratensis",
+        "fine_fescue": "Festuche a foglia fine",
+        "microclover_mix": "Miscuglio con microtrifoglio",
+        "bermuda": "Gramigna (Cynodon)",
+        "zoysia": "Zoysia",
+        "st_augustine": "Stenotaphrum",
+        "dichondra": "Dichondra"
+      }
+    },
+    "establishment_method": {
+      "options": {
+        "sod": "Prato in zolle (rotoli)",
+        "seed": "Semina",
+        "hydroseed": "Idrosemina",
+        "unknown": "Non so"
+      }
+    },
+    "irrigation_type": {
+      "options": {
+        "pop_up_spray": "Irrigatori statici a scomparsa",
+        "rotor": "Irrigatori dinamici (turbine)",
+        "drip": "Ala gocciolante o subirrigazione",
+        "hose_manual": "Irrigazione manuale con canna",
+        "none": "Nessun impianto"
+      }
+    },
+    "fertilizer_product": {
+      "options": {
+        "bottos_pro_start": "Bottos Pro Start 13-24-10 (starter)",
+        "bottos_slow_green": "Bottos Slow Green 22-5-10 +2MgO",
+        "bottos_slow_k": "Bottos Slow K 13-5-20 +2MgO",
+        "bottos_autumn_k": "Bottos Autumn K 21-0-25",
+        "quick_release": "Minerale a pronto effetto",
+        "slow_release": "Granulare a lenta cessione",
+        "organic": "Organico pellettato",
+        "liquid": "Concime liquido",
+        "iron": "Ferro / antimuschio",
+        "custom": "Titolo personalizzato",
+        "bottos_dark_green": "Bottos Dark Green 11-0-0 +3MgO +4.5Fe (rinverdente)",
+        "bottos_summer_k": "Bottos Summer K 10-0-30"
+      }
+    },
+    "sowing_kind": {
+      "options": {
+        "overseed": "Trasemina",
+        "new_lawn": "Nuovo impianto",
+        "repair": "Riparazione di chiazze"
+      }
+    },
+    "maintenance_kind": {
+      "options": {
+        "mowing": "Taglio",
+        "fertilizing": "Concimazione",
+        "sowing": "Semina",
+        "weeding": "Diserbo",
+        "aeration": "Arieggiatura",
+        "scarifying": "Scarificatura",
+        "top_dressing": "Top dressing (sabbiatura)",
+        "treatment": "Trattamento",
+        "leaf_clearing": "Raccolta foglie",
+        "seedbed_watering": "Semina mantenuta umida",
+        "syringing": "Rinfrescatura"
+      }
+    },
+    "issue": {
+      "options": {
+        "brown_patches": "Chiazze secche",
+        "weeds": "Infestanti",
+        "moss": "Muschio",
+        "bare_spots": "Zone diradate",
+        "fungus": "Malattia fungina",
+        "pests": "Parassiti",
+        "thatch": "Feltro",
+        "thin": "Cotico rado"
+      }
+    },
+    "feature_kind": {
+      "options": {
+        "none": "Nessuno",
+        "deciduous_tree": "Albero a foglia caduca",
+        "evergreen_tree": "Albero sempreverde",
+        "structure": "Struttura (gazebo, pergola, muro)"
+      }
+    },
+    "lawn_status": {
+      "options": {
+        "excellent": "Ottimo",
+        "good": "Buono",
+        "fair": "Discreto",
+        "poor": "Scadente"
+      }
+    },
+    "robot_cadence": {
+      "options": {
+        "frequent": "Tutti i giorni che la stagione richiede, come lo programma la casa",
+        "balanced": "Quanto basta perché lo sfalcio resti minuto",
+        "gentle": "Il meno possibile, nei limiti della regola del terzo"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "water_deficit": {
+        "name": "Deficit idrico del suolo"
+      },
+      "irrigation_recommended": {
+        "name": "Irrigazione consigliata"
+      },
+      "rain_today": {
+        "name": "Pioggia oggi"
+      },
+      "irrigation_today": {
+        "name": "Irrigazione erogata oggi"
+      },
+      "days_since_mowing": {
+        "name": "Giorni dall'ultimo taglio"
+      },
+      "next_action": {
+        "name": "Prossimo intervento",
+        "state": {
+          "establish_sod_water_daily": "Bagna le zolle ogni giorno",
+          "establish_no_mowing": "Non tagliare ancora",
+          "establish_seed_keep_moist": "Mantieni umido il letto di semina",
+          "establish_first_mow_high": "Primo taglio, alto",
+          "establish_starter_feed": "Concimazione starter",
+          "irrigate_dormant_drought": "Siccità invernale: una bagnatura",
+          "no_irrigation_dormant": "Nessuna irrigazione, prato in riposo",
+          "irrigation_due_soon": "Irrigazione tra un paio di giorni",
+          "no_irrigation_needed": "Irrigazione non necessaria",
+          "hold_irrigation_rain_coming": "Sospendi l'irrigazione, arriva pioggia",
+          "irrigate_now": "Irriga ora",
+          "no_mowing_dormant": "Nessun taglio, prato in riposo",
+          "delay_mowing_stress": "Rinvia il taglio, prato sotto stress",
+          "mow_soon": "Taglia nei prossimi giorni",
+          "mow_now_third_rule": "Taglia ora",
+          "mowing_height": "Altezza di taglio",
+          "feed_recently_done": "Concimato di recente",
+          "feed_wait": "Attendi per concimare",
+          "feed_now": "Concima ora",
+          "overseed_now": "Trasemina ora",
+          "pre_emergent_window": "Finestra per l'antigerminello",
+          "dollar_spot_risk": "Rischio dollar spot",
+          "brown_patch_risk": "Rischio brown patch (Rhizoctonia)",
+          "fungus_seen_measures": "Fungo: adegua le cure",
+          "aerate_now": "Arieggia ora",
+          "scarify_now": "Scarifica ora",
+          "record_status_reminder": "Valuta il prato",
+          "lawn_poor_diagnosis": "Prato in cattive condizioni",
+          "prepare_overseeding": "Prepara la trasemina",
+          "overseed_wait": "Attendi per traseminare",
+          "pre_emergent_wait": "Antigerminello: non ancora",
+          "weed_control_wait": "Attendi per il diserbo",
+          "weed_control_broadleaf_now": "Diserbo foglia larga",
+          "weed_control_grassy_now": "Diserbo foglia stretta",
+          "moss_control_now": "Trattamento antimuschio",
+          "disease_preventive_now": "Fungicida preventivo",
+          "soil_work_wait": "Attendi per i lavori al suolo",
+          "top_dress_now": "Top dressing ora",
+          "clear_leaves": "Rimuovi le foglie cadute"
+        }
+      },
+      "season_phase": {
+        "name": "Fase stagionale",
+        "state": {
+          "dormant": "Riposo vegetativo",
+          "spring_greenup": "Ripresa primaverile",
+          "spring_active": "Crescita primaverile",
+          "summer_stress": "Stress estivo",
+          "autumn_active": "Crescita autunnale",
+          "late_autumn": "Tardo autunno"
+        }
+      },
+      "soil_temperature": {
+        "name": "Temperatura del suolo (stimata)"
+      },
+      "nitrogen_this_year": {
+        "name": "Azoto distribuito nell'anno"
+      },
+      "forecast_rain_reliability": {
+        "name": "Affidabilità della pioggia prevista"
+      },
+      "water_use_today": {
+        "name": "Consumo idrico del prato oggi"
+      },
+      "activity": {
+        "name": "Attività"
+      }
+    },
+    "calendar": {
+      "calendar": {
+        "name": "Calendario"
+      }
+    }
+  },
+  "services": {
+    "log_fertilizing": {
+      "name": "Registra concimazione",
+      "description": "Registra una concimazione sul tappeto erboso, per prodotto o per titolo, così da contabilizzare l'azoto distribuito.",
+      "fields": {
+        "product": {
+          "name": "Prodotto",
+          "description": "Un prodotto predefinito, oppure Personalizzato per inserire il titolo."
+        },
+        "n": {
+          "name": "Azoto (N)",
+          "description": "Percentuale, per un prodotto personalizzato."
+        },
+        "p": {
+          "name": "Fosforo (P₂O₅)",
+          "description": "Percentuale, per un prodotto personalizzato."
+        },
+        "k": {
+          "name": "Potassio (K₂O)",
+          "description": "Percentuale, per un prodotto personalizzato."
+        },
+        "dose_g_m2": {
+          "name": "Dose",
+          "description": "Grammi per metro quadro. Se vuota, il valore medio della dose di etichetta."
+        },
+        "notes": {
+          "name": "Note",
+          "description": "Quello che vale la pena ricordare."
+        },
+        "zone_id": {
+          "name": "Zona",
+          "description": "La zona a cui si riferisce, pubblicata dal sensore attività come zone_id."
+        }
+      }
+    },
+    "log_sowing": {
+      "name": "Registra semina",
+      "description": "Registra una semina, una trasemina o una risemina di riparazione.",
+      "fields": {
+        "kind": {
+          "name": "Tipo",
+          "description": "Trasemina, nuovo impianto o riparazione di chiazze."
+        },
+        "seed_mix": {
+          "name": "Miscuglio",
+          "description": "Il miscuglio o la specie utilizzata."
+        },
+        "rate_g_m2": {
+          "name": "Dose di semina",
+          "description": "Grammi per metro quadro."
+        },
+        "notes": {
+          "name": "Note",
+          "description": "Quello che vale la pena ricordare."
+        },
+        "zone_id": {
+          "name": "Zona",
+          "description": "La zona a cui si riferisce, pubblicata dal sensore attività come zone_id."
+        }
+      }
+    },
+    "log_maintenance": {
+      "name": "Registra intervento",
+      "description": "Registra un intervento di manutenzione con i suoi dettagli.",
+      "fields": {
+        "kind": {
+          "name": "Intervento",
+          "description": "Cosa è stato fatto."
+        },
+        "height_mm": {
+          "name": "Altezza di taglio",
+          "description": "Per il taglio."
+        },
+        "product": {
+          "name": "Prodotto",
+          "description": "Per trattamenti e diserbo."
+        },
+        "notes": {
+          "name": "Note",
+          "description": "Quello che vale la pena ricordare."
+        },
+        "zone_id": {
+          "name": "Zona",
+          "description": "La zona a cui si riferisce, pubblicata dal sensore attività come zone_id."
+        }
+      }
+    },
+    "log_issue": {
+      "name": "Segnala problema",
+      "description": "Annota per oggi un problema osservato sul prato.",
+      "fields": {
+        "issue": {
+          "name": "Problema",
+          "description": "Cosa è stato osservato."
+        },
+        "notes": {
+          "name": "Note",
+          "description": "Dove, quanto."
+        },
+        "zone_id": {
+          "name": "Zona",
+          "description": "La zona a cui si riferisce, pubblicata dal sensore attività come zone_id."
+        }
+      }
+    },
+    "log_irrigation": {
+      "name": "Registra irrigazione",
+      "description": "Aggiunge un ciclo di irrigazione alla giornata di oggi.",
+      "fields": {
+        "minutes": {
+          "name": "Durata",
+          "description": "Minuti di funzionamento dell'impianto."
+        },
+        "replace_today": {
+          "name": "Sostituisci il totale di oggi",
+          "description": "Imposta il totale della giornata invece di sommarlo. Serve a correggere un valore."
+        },
+        "zone_id": {
+          "name": "Zona",
+          "description": "La zona a cui si riferisce, pubblicata dal sensore attività come zone_id."
+        }
+      }
+    },
+    "set_status": {
+      "name": "Registra lo stato del prato",
+      "description": "Annota come si presenta il prato: il motore lo usa per adattare irrigazione e concimazione.",
+      "fields": {
+        "status": {
+          "name": "Stato",
+          "description": "Ottimo, buono, discreto o scarso."
+        },
+        "zone_id": {
+          "name": "Zona",
+          "description": "La zona a cui si riferisce, pubblicata dal sensore attività come zone_id."
+        }
+      }
+    },
+    "import_weather": {
+      "name": "Importa il meteo",
+      "description": "Inserisci una giornata già trascorsa, come è stata misurata, così un prato configurato oggi ha alle spalle la sua stagione. Inserisci i giorni dal più vecchio: ognuno eredita il bilancio idrico lasciato dal precedente.",
+      "fields": {
+        "zone_id": {
+          "name": "Zona",
+          "description": "La zona a cui si riferisce, pubblicata dal sensore attività come zone_id."
+        },
+        "date": {
+          "name": "Giorno",
+          "description": "Il giorno da inserire."
+        },
+        "tmax": {
+          "name": "Temperatura massima",
+          "description": "La massima del giorno, in °C."
+        },
+        "tmin": {
+          "name": "Temperatura minima",
+          "description": "La minima del giorno, in °C."
+        },
+        "rain_mm": {
+          "name": "Pioggia",
+          "description": "La pioggia caduta quel giorno, in mm."
+        },
+        "humidity_pct": {
+          "name": "Umidità media",
+          "description": "Facoltativa. Con umidità, vento e radiazione la giornata è calcolata con Penman-Monteith invece che dalle sole temperature."
+        },
+        "wind_ms": {
+          "name": "Vento medio a 2 m",
+          "description": "Facoltativo."
+        },
+        "solar_mj": {
+          "name": "Radiazione solare",
+          "description": "Facoltativa, MJ per m² sulla giornata."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "unknown_field": {
+      "message": "Nessun tappeto erboso Hosekeeper corrisponde alla voce {entry}."
+    }
+  },
+  "config_subentries": {
+    "zone": {
+      "title": "Zona",
+      "step": {
+        "zone": {
+          "title": "La zona",
+          "description": "Una porzione del prato, con la sua elettrovalvola. Superficie ed esposizione determinano quanta acqua le serve e quando conviene tagliarla.",
+          "data": {
+            "area": "Superficie",
+            "exposure": "Esposizione",
+            "name": "Nome",
+            "valve_entity": "Elettrovalvola o interruttore"
+          },
+          "data_description": {
+            "exposure": "Pieno sole: almeno sei ore di luce diretta nei mesi estivi.",
+            "valve_entity": "Facoltativa. Il tempo di funzionamento viene registrato automaticamente mentre è aperta."
+          }
+        },
+        "features": {
+          "title": "Ombreggiamento",
+          "description": "Alberi e strutture che ombreggiano parte di questa zona. L'ombra riduce il consumo idrico ma favorisce muschio e malattie; gli alberi competono per l'acqua e perdono le foglie. Lascia tutto su nessuno se la zona è in pieno campo.",
+          "data": {
+            "feature_0_kind": "Elemento 1",
+            "feature_1_kind": "Elemento 2",
+            "feature_2_kind": "Elemento 3",
+            "feature_0_shade": "Quota di zona ombreggiata dall'elemento 1",
+            "feature_1_shade": "Quota di zona ombreggiata dall'elemento 2",
+            "feature_2_shade": "Quota di zona ombreggiata dall'elemento 3"
+          },
+          "data_description": {
+            "feature_0_shade": "Quanta parte della zona resta nella sua ombra per buona parte della giornata."
+          }
+        }
+      },
+      "error": {
+        "too_much_shade": "Le quote di ombra superano il 90 % della zona."
+      },
+      "abort": {
+        "reconfigure_successful": "Zona aggiornata."
+      },
+      "entry_type": "Zona",
+      "initiate_flow": {
+        "user": "Zona",
+        "reconfigure": "Zona"
+      }
+    }
+  }
+}

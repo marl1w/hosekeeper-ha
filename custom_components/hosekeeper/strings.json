@@ -1,0 +1,515 @@
+{
+  "config": {
+    "step": {
+      "lawn": {
+        "title": "The lawn",
+        "description": "The turf as a whole. Where it is, what it sits on, what grows on it and how it was made; then, in the next two steps, what waters it and what the weather over it is read from. Each zone is added afterwards, with its own size, aspect and valve.",
+        "data": {
+          "name": "Name",
+          "location": "Location",
+          "soil_type": "Soil",
+          "grass_type": "Grass",
+          "establishment_method": "How the lawn was made",
+          "establishment_date": "When the lawn was made"
+        },
+        "data_description": {
+          "location": "Used for the sun's path and the climate zone. Defaults to your home.",
+          "soil_type": "Squeeze a damp handful: sand falls apart, clay ribbons, loam holds and crumbles.",
+          "grass_type": "Pick the closest match. A seed mix for temperate climates is a cool-season mix.",
+          "establishment_method": "Sod roots in weeks and seed in a season, so the first year's care differs.",
+          "establishment_date": "Leave empty if the lawn is older than a couple of years."
+        }
+      },
+      "irrigation": {
+        "title": "Irrigation",
+        "description": "How water gets onto the grass. Hosekeeper converts minutes to millimetres with this, so advice can be given in the unit your timer understands.",
+        "data": {
+          "irrigation_type": "System",
+          "flow_l_min": "Flow rate",
+          "precipitation_rate_mm_h": "Precipitation rate"
+        },
+        "data_description": {
+          "flow_l_min": "Litres per minute for the whole field. Read it from the water meter during a run, or add up the nozzles.",
+          "precipitation_rate_mm_h": "If you have measured it with catch cups, this wins over the flow rate."
+        }
+      },
+      "sources": {
+        "title": "Weather and sensors",
+        "description": "The forecast is required. Everything else is optional and, when present, replaces the forecast's estimate with what was measured.",
+        "data": {
+          "weather_entity": "Weather forecast",
+          "rain_sensor": "Rain today",
+          "temperature_sensor": "Temperature",
+          "humidity_sensor": "Humidity",
+          "wind_sensor": "Wind speed",
+          "solar_sensor": "Solar radiation",
+          "soil_moisture_sensor": "Soil moisture",
+          "mower_entity": "Robot mower",
+          "deck_min_mm": "Lowest the mower cuts",
+          "deck_max_mm": "Highest the mower cuts",
+          "robot_cadence": "How often the robot goes out"
+        },
+        "data_description": {
+          "rain_sensor": "A daily total that resets at midnight, or an ever-increasing total. Both are fine.",
+          "solar_sensor": "With humidity and wind this enables the full FAO-56 evapotranspiration model.",
+          "mower_entity": "Each mowing session is logged as a mow.",
+          "deck_min_mm": "Optional, both together: the range on the mower's dial or deck. Advice is kept inside it, so a robot that stops at 60 mm is never asked for 75.",
+          "robot_cadence": "Every pass has the lawn occupied and goes over the same ground, so a gentler cadence leaves it alone between cuts. Ignored where there is no robot."
+        }
+      }
+    },
+    "error": {
+      "flow_required": "Enter a flow rate or a precipitation rate, or choose no irrigation system.",
+      "duplicate_source": "The same entity is selected twice. Each sensor can feed one measurement only.",
+      "deck_reversed": "The lowest cut is above the highest one."
+    },
+    "abort": {
+      "already_configured": "A lawn with this name is already set up.",
+      "reconfigure_successful": "The lawn was updated."
+    }
+  },
+  "selector": {
+    "exposure": {
+      "options": {
+        "full_sun": "Full sun",
+        "partial_shade": "Partial shade",
+        "shade": "Shade"
+      }
+    },
+    "soil_type": {
+      "options": {
+        "sandy": "Sandy",
+        "sandy_loam": "Sandy loam",
+        "loam": "Loam",
+        "clay_loam": "Clay loam",
+        "clay": "Clay"
+      }
+    },
+    "grass_type": {
+      "options": {
+        "cool_season_mix": "Cool-season mix",
+        "tall_fescue": "Tall fescue",
+        "perennial_ryegrass": "Perennial ryegrass",
+        "kentucky_bluegrass": "Kentucky bluegrass",
+        "fine_fescue": "Fine fescue",
+        "microclover_mix": "Grass and microclover mix",
+        "bermuda": "Bermuda grass",
+        "zoysia": "Zoysia",
+        "st_augustine": "St. Augustine grass",
+        "dichondra": "Dichondra"
+      }
+    },
+    "establishment_method": {
+      "options": {
+        "sod": "Sod rolls",
+        "seed": "Seed",
+        "hydroseed": "Hydroseeding",
+        "unknown": "Don't know"
+      }
+    },
+    "irrigation_type": {
+      "options": {
+        "pop_up_spray": "Pop-up sprays",
+        "rotor": "Rotors",
+        "drip": "Drip or subsurface",
+        "hose_manual": "Hose by hand",
+        "none": "No irrigation"
+      }
+    },
+    "fertilizer_product": {
+      "options": {
+        "bottos_pro_start": "Bottos Pro Start 13-24-10 (starter)",
+        "bottos_slow_green": "Bottos Slow Green 22-5-10 +2MgO",
+        "bottos_slow_k": "Bottos Slow K 13-5-20 +2MgO",
+        "bottos_autumn_k": "Bottos Autumn K 21-0-25",
+        "quick_release": "Quick-release mineral",
+        "slow_release": "Slow-release granular",
+        "organic": "Organic pellets",
+        "liquid": "Liquid feed",
+        "iron": "Iron / moss control",
+        "custom": "Custom composition",
+        "bottos_dark_green": "Bottos Dark Green 11-0-0 +3MgO +4.5Fe (greening)",
+        "bottos_summer_k": "Bottos Summer K 10-0-30"
+      }
+    },
+    "sowing_kind": {
+      "options": {
+        "overseed": "Overseeding",
+        "new_lawn": "New lawn",
+        "repair": "Spot repair"
+      }
+    },
+    "maintenance_kind": {
+      "options": {
+        "mowing": "Mowing",
+        "fertilizing": "Fertilizing",
+        "sowing": "Sowing",
+        "weeding": "Weeding",
+        "aeration": "Aeration",
+        "scarifying": "Scarifying",
+        "top_dressing": "Top dressing",
+        "treatment": "Treatment",
+        "leaf_clearing": "Leaf clearing",
+        "seedbed_watering": "Seedbed kept damp",
+        "syringing": "Syringing"
+      }
+    },
+    "issue": {
+      "options": {
+        "brown_patches": "Brown patches",
+        "weeds": "Weeds",
+        "moss": "Moss",
+        "bare_spots": "Bare spots",
+        "fungus": "Fungus",
+        "pests": "Pests",
+        "thatch": "Thatch",
+        "thin": "Thin turf"
+      }
+    },
+    "feature_kind": {
+      "options": {
+        "none": "None",
+        "deciduous_tree": "Deciduous tree",
+        "evergreen_tree": "Evergreen tree",
+        "structure": "Structure (gazebo, pergola, wall)"
+      }
+    },
+    "lawn_status": {
+      "options": {
+        "excellent": "Excellent",
+        "good": "Good",
+        "fair": "Fair",
+        "poor": "Poor"
+      }
+    },
+    "robot_cadence": {
+      "options": {
+        "frequent": "Every day the season asks for, as the machine schedules it",
+        "balanced": "Often enough to keep the clippings short",
+        "gentle": "As seldom as the grass allows"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "water_deficit": {
+        "name": "Soil water deficit"
+      },
+      "irrigation_recommended": {
+        "name": "Irrigation recommended"
+      },
+      "rain_today": {
+        "name": "Rain today"
+      },
+      "irrigation_today": {
+        "name": "Irrigation applied today"
+      },
+      "days_since_mowing": {
+        "name": "Days since mowing"
+      },
+      "next_action": {
+        "name": "Next action",
+        "state": {
+          "establish_sod_water_daily": "Water new sod daily",
+          "establish_no_mowing": "No mowing yet",
+          "establish_seed_keep_moist": "Keep seedbed moist",
+          "establish_first_mow_high": "First mow, cut high",
+          "establish_starter_feed": "Apply starter fertilizer",
+          "irrigate_dormant_drought": "Winter drought: water once",
+          "no_irrigation_dormant": "No irrigation, lawn dormant",
+          "irrigation_due_soon": "Irrigation due in a couple of days",
+          "no_irrigation_needed": "No irrigation needed",
+          "hold_irrigation_rain_coming": "Hold irrigation, rain coming",
+          "irrigate_now": "Irrigate now",
+          "no_mowing_dormant": "No mowing, lawn dormant",
+          "delay_mowing_stress": "Delay mowing, lawn stressed",
+          "mow_soon": "Mow in the next days",
+          "mow_now_third_rule": "Mow now",
+          "mowing_height": "Mowing height",
+          "feed_recently_done": "Recently fertilized",
+          "feed_wait": "Wait to fertilize",
+          "feed_now": "Fertilize now",
+          "overseed_now": "Overseed now",
+          "pre_emergent_window": "Pre-emergent window open",
+          "dollar_spot_risk": "Dollar spot risk",
+          "brown_patch_risk": "Brown patch risk",
+          "fungus_seen_measures": "Fungus: adjust care",
+          "aerate_now": "Aerate now",
+          "scarify_now": "Scarify now",
+          "record_status_reminder": "Rate the lawn",
+          "lawn_poor_diagnosis": "Lawn in poor condition",
+          "prepare_overseeding": "Prepare for overseeding",
+          "overseed_wait": "Wait to overseed",
+          "pre_emergent_wait": "Pre-emergent: not yet",
+          "weed_control_wait": "Wait to treat weeds",
+          "weed_control_broadleaf_now": "Treat broadleaf weeds",
+          "weed_control_grassy_now": "Treat grassy weeds",
+          "moss_control_now": "Treat moss",
+          "disease_preventive_now": "Preventive fungicide",
+          "soil_work_wait": "Wait for soil work",
+          "top_dress_now": "Top dress now",
+          "clear_leaves": "Clear fallen leaves"
+        }
+      },
+      "season_phase": {
+        "name": "Season phase",
+        "state": {
+          "dormant": "Dormant",
+          "spring_greenup": "Spring green-up",
+          "spring_active": "Spring growth",
+          "summer_stress": "Summer stress",
+          "autumn_active": "Autumn growth",
+          "late_autumn": "Late autumn"
+        }
+      },
+      "soil_temperature": {
+        "name": "Soil temperature (estimated)"
+      },
+      "nitrogen_this_year": {
+        "name": "Nitrogen applied this year"
+      },
+      "forecast_rain_reliability": {
+        "name": "Forecast rain reliability"
+      },
+      "water_use_today": {
+        "name": "Lawn water use today"
+      },
+      "activity": {
+        "name": "Activity"
+      }
+    },
+    "calendar": {
+      "calendar": {
+        "name": "Calendar"
+      }
+    }
+  },
+  "services": {
+    "log_fertilizing": {
+      "name": "Log fertilizing",
+      "description": "Record a fertilizer application on a lawn, by product or by composition, so nitrogen can be counted.",
+      "fields": {
+        "product": {
+          "name": "Product",
+          "description": "A preset, or Custom to enter the composition."
+        },
+        "n": {
+          "name": "Nitrogen (N)",
+          "description": "Percent, for a custom product."
+        },
+        "p": {
+          "name": "Phosphorus (P₂O₅)",
+          "description": "Percent, for a custom product."
+        },
+        "k": {
+          "name": "Potassium (K₂O)",
+          "description": "Percent, for a custom product."
+        },
+        "dose_g_m2": {
+          "name": "Dose",
+          "description": "Grams per square metre. Defaults to the middle of the label rate."
+        },
+        "notes": {
+          "name": "Notes",
+          "description": "Anything worth remembering."
+        },
+        "zone_id": {
+          "name": "Zone",
+          "description": "The zone it applies to, published by the activity sensor as zone_id."
+        }
+      }
+    },
+    "log_sowing": {
+      "name": "Log sowing",
+      "description": "Record seeding, overseeding or a repair.",
+      "fields": {
+        "kind": {
+          "name": "Kind",
+          "description": "Overseeding, a new lawn or a spot repair."
+        },
+        "seed_mix": {
+          "name": "Seed mix",
+          "description": "The mix or species used."
+        },
+        "rate_g_m2": {
+          "name": "Rate",
+          "description": "Grams per square metre."
+        },
+        "notes": {
+          "name": "Notes",
+          "description": "Anything worth remembering."
+        },
+        "zone_id": {
+          "name": "Zone",
+          "description": "The zone it applies to, published by the activity sensor as zone_id."
+        }
+      }
+    },
+    "log_maintenance": {
+      "name": "Log maintenance",
+      "description": "Record any maintenance action with its details.",
+      "fields": {
+        "kind": {
+          "name": "Action",
+          "description": "What was done."
+        },
+        "height_mm": {
+          "name": "Cutting height",
+          "description": "For mowing."
+        },
+        "product": {
+          "name": "Product",
+          "description": "For treatments and weeding."
+        },
+        "notes": {
+          "name": "Notes",
+          "description": "Anything worth remembering."
+        },
+        "zone_id": {
+          "name": "Zone",
+          "description": "The zone it applies to, published by the activity sensor as zone_id."
+        }
+      }
+    },
+    "log_issue": {
+      "name": "Log issue",
+      "description": "Tag today with a problem seen on the lawn.",
+      "fields": {
+        "issue": {
+          "name": "Issue",
+          "description": "What was seen."
+        },
+        "notes": {
+          "name": "Notes",
+          "description": "Where, how much."
+        },
+        "zone_id": {
+          "name": "Zone",
+          "description": "The zone it applies to, published by the activity sensor as zone_id."
+        }
+      }
+    },
+    "log_irrigation": {
+      "name": "Log irrigation",
+      "description": "Add an irrigation run to today.",
+      "fields": {
+        "minutes": {
+          "name": "Run time",
+          "description": "Minutes the system ran."
+        },
+        "replace_today": {
+          "name": "Replace today's total",
+          "description": "Set the day's total rather than adding to it. Use it to correct a figure."
+        },
+        "zone_id": {
+          "name": "Zone",
+          "description": "The zone it applies to, published by the activity sensor as zone_id."
+        }
+      }
+    },
+    "set_status": {
+      "name": "Set lawn condition",
+      "description": "Record how the lawn looks, which the engine uses to adapt watering and feeding.",
+      "fields": {
+        "status": {
+          "name": "Condition",
+          "description": "Excellent, good, fair or poor."
+        },
+        "zone_id": {
+          "name": "Zone",
+          "description": "The zone it applies to, published by the activity sensor as zone_id."
+        }
+      }
+    },
+    "import_weather": {
+      "name": "Import weather",
+      "description": "Enter one day that has already happened, as it was measured, so a lawn set up today has the season behind it. Apply the days oldest first: each one carries in the balance the day before it left behind.",
+      "fields": {
+        "zone_id": {
+          "name": "Zone",
+          "description": "The zone it applies to, published by the activity sensor as zone_id."
+        },
+        "date": {
+          "name": "Day",
+          "description": "The day being entered."
+        },
+        "tmax": {
+          "name": "Highest temperature",
+          "description": "The day's high, in °C."
+        },
+        "tmin": {
+          "name": "Lowest temperature",
+          "description": "The day's low, in °C."
+        },
+        "rain_mm": {
+          "name": "Rain",
+          "description": "What fell that day, in mm."
+        },
+        "humidity_pct": {
+          "name": "Mean humidity",
+          "description": "Optional. With humidity, wind and radiation the day is worked out by Penman-Monteith rather than from the temperatures alone."
+        },
+        "wind_ms": {
+          "name": "Mean wind at 2 m",
+          "description": "Optional."
+        },
+        "solar_mj": {
+          "name": "Solar radiation",
+          "description": "Optional, MJ per m² over the day."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "unknown_field": {
+      "message": "No Hosekeeper lawn matches the entry {entry}."
+    }
+  },
+  "config_subentries": {
+    "zone": {
+      "title": "Zone",
+      "step": {
+        "zone": {
+          "title": "The zone",
+          "description": "One part of the lawn, with its own valve. Its area and how much sun it gets decide how much water it needs and when it is best cut.",
+          "data": {
+            "area": "Area",
+            "exposure": "Sun exposure",
+            "name": "Name",
+            "valve_entity": "Valve or switch"
+          },
+          "data_description": {
+            "exposure": "Full sun is six or more hours of direct light in summer.",
+            "valve_entity": "Optional. Run time is logged automatically while it is on."
+          }
+        },
+        "features": {
+          "title": "Shade",
+          "description": "Trees and structures that shade part of this zone. Shade cuts water use but favours moss and disease, and trees compete for water and drop leaves. Leave everything at none if the zone is in the open.",
+          "data": {
+            "feature_0_kind": "Feature 1",
+            "feature_1_kind": "Feature 2",
+            "feature_2_kind": "Feature 3",
+            "feature_0_shade": "Share of zone shaded by feature 1",
+            "feature_1_shade": "Share of zone shaded by feature 2",
+            "feature_2_shade": "Share of zone shaded by feature 3"
+          },
+          "data_description": {
+            "feature_0_shade": "How much of the zone sits in its shade for a good part of the day."
+          }
+        }
+      },
+      "error": {
+        "too_much_shade": "Shade shares add up to more than 90 % of the zone."
+      },
+      "abort": {
+        "reconfigure_successful": "The zone was updated."
+      },
+      "entry_type": "Zone",
+      "initiate_flow": {
+        "user": "Zone",
+        "reconfigure": "Zone"
+      }
+    }
+  }
+}
