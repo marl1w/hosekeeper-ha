@@ -1,0 +1,4 @@
+# Test dependencies. The integration itself needs nothing beyond Home Assistant.
+pytest-homeassistant-custom-component
+# The panel depends on the frontend component, which imports this package at setup.
+home-assistant-frontend

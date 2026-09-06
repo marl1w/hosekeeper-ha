@@ -1,0 +1,91 @@
+{
+  "_comment": "The sample garden the preview shows when no local one is present. Three lawns on one property, cool-season turf, laid as sod in June and overseeded at the end of August, which is the case that exercises most of the engine: a shallow root zone, two watering regimes at once, and a mower held off new seed. Put your own in scripts/local/garden.json, which is ignored by git.",
+  "latitude": 45.0,
+  "longitude": 9.0,
+  "elevation": 100,
+  "timezone_offset_hours": 2,
+  "irrigation_at": "05:30",
+  "zones": [
+    {
+      "entry_id": "north",
+      "name": "North lawn",
+      "area_m2": 50,
+      "exposure": "full_sun",
+      "soil_type": "loam",
+      "grass_type": "cool_season_mix",
+      "establishment_method": "sod",
+      "establishment_date": "2026-06-06",
+      "irrigation_type": "pop_up_spray",
+      "precipitation_rate_mm_h": 20.0,
+      "minutes_per_day": 25,
+      "mow_height_mm": 60,
+      "mown_on": [
+        "2026-09-04",
+        "2026-08-28",
+        "2026-08-24",
+        "2026-08-21",
+        "2026-08-05",
+        "2026-07-31",
+        "2026-07-28",
+        "2026-07-18"
+      ],
+      "sown_on": "2026-08-30",
+      "valve_entity": "switch.north_lawn_valve",
+      "mower_entity": "lawn_mower.robot"
+    },
+    {
+      "entry_id": "west",
+      "name": "West lawn",
+      "area_m2": 50,
+      "exposure": "full_sun",
+      "soil_type": "loam",
+      "grass_type": "cool_season_mix",
+      "establishment_method": "sod",
+      "establishment_date": "2026-06-06",
+      "irrigation_type": "pop_up_spray",
+      "precipitation_rate_mm_h": 20.0,
+      "minutes_per_day": 25,
+      "mow_height_mm": 60,
+      "mown_on": [
+        "2026-09-04",
+        "2026-08-28",
+        "2026-08-24",
+        "2026-08-21",
+        "2026-08-05",
+        "2026-07-31",
+        "2026-07-28",
+        "2026-07-18"
+      ],
+      "sown_on": "2026-08-30",
+      "valve_entity": "switch.west_lawn_valve",
+      "mower_entity": "lawn_mower.robot"
+    },
+    {
+      "entry_id": "south",
+      "name": "South lawn",
+      "area_m2": 30,
+      "exposure": "full_sun",
+      "soil_type": "loam",
+      "grass_type": "cool_season_mix",
+      "establishment_method": "sod",
+      "establishment_date": "2026-06-06",
+      "irrigation_type": "pop_up_spray",
+      "precipitation_rate_mm_h": 20.0,
+      "minutes_per_day": 25,
+      "mow_height_mm": 60,
+      "mown_on": [
+        "2026-09-04",
+        "2026-08-28",
+        "2026-08-24",
+        "2026-08-21",
+        "2026-08-05",
+        "2026-07-31",
+        "2026-07-28",
+        "2026-07-18"
+      ],
+      "sown_on": "2026-08-30",
+      "valve_entity": "switch.south_lawn_valve",
+      "mower_entity": "lawn_mower.robot"
+    }
+  ]
+}

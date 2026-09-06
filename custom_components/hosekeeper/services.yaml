@@ -1,0 +1,200 @@
+log_fertilizing:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: hosekeeper
+    product:
+      required: false
+      default: slow_release
+      selector:
+        select:
+          translation_key: fertilizer_product
+          options:
+            - bottos_pro_start
+            - bottos_dark_green
+            - bottos_summer_k
+            - bottos_slow_green
+            - bottos_slow_k
+            - bottos_autumn_k
+            - quick_release
+            - slow_release
+            - organic
+            - liquid
+            - iron
+            - custom
+    n:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 50
+          step: 0.5
+          unit_of_measurement: "%"
+    p:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 50
+          step: 0.5
+          unit_of_measurement: "%"
+    k:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 50
+          step: 0.5
+          unit_of_measurement: "%"
+    dose_g_m2:
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 200
+          step: 1
+          unit_of_measurement: "g/m²"
+    notes:
+      required: false
+      selector:
+        text:
+
+log_sowing:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: hosekeeper
+    kind:
+      required: false
+      default: overseed
+      selector:
+        select:
+          translation_key: sowing_kind
+          options:
+            - overseed
+            - new_lawn
+            - repair
+    seed_mix:
+      required: false
+      selector:
+        text:
+    rate_g_m2:
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: "g/m²"
+    notes:
+      required: false
+      selector:
+        text:
+
+log_maintenance:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: hosekeeper
+    kind:
+      required: true
+      selector:
+        select:
+          translation_key: maintenance_kind
+          options:
+            - mowing
+            - fertilizing
+            - sowing
+            - weeding
+            - aeration
+            - scarifying
+            - top_dressing
+            - treatment
+            - leaf_clearing
+            - seedbed_watering
+            - syringing
+    height_mm:
+      required: false
+      selector:
+        number:
+          min: 10
+          max: 120
+          step: 5
+          unit_of_measurement: mm
+    product:
+      required: false
+      selector:
+        text:
+    notes:
+      required: false
+      selector:
+        text:
+
+log_issue:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: hosekeeper
+    issue:
+      required: true
+      selector:
+        select:
+          translation_key: issue
+          options:
+            - brown_patches
+            - thin
+            - weeds
+            - moss
+            - bare_spots
+            - fungus
+            - pests
+            - thatch
+    notes:
+      required: false
+      selector:
+        text:
+
+log_irrigation:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: hosekeeper
+    minutes:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 600
+          step: 1
+          unit_of_measurement: min
+    replace_today:
+      selector:
+        boolean:
+
+set_status:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: hosekeeper
+    status:
+      required: true
+      selector:
+        select:
+          options:
+            - excellent
+            - good
+            - fair
+            - poor
+          translation_key: lawn_status
