@@ -625,7 +625,7 @@ async def test_a_lawn_watered_by_hand_is_given_no_queue(
         [c["start"][11:16] for c in each.coordinator.data.irrigation_plan["germination"]]
         for each in zones
     ]
-    assert hours[0] == hours[1] == ["11:00", "14:00", "17:00"]
+    assert hours[0] == hours[1] == ["09:00", "13:00", "17:00"]
     assert all(each.coordinator.data.seedbed_queue_min == 0 for each in zones)
 
 
@@ -702,21 +702,21 @@ async def test_the_station_outranks_the_forecast_once_the_day_is_over(
 
 
 @pytest.mark.usefixtures("weather_service", "station")
-async def test_a_seedbed_pass_through_the_valve_is_not_credited_to_the_balance(
+async def test_a_seedbed_pass_over_patches_is_not_credited_to_the_balance(
     hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
 ) -> None:
     """The valve serves both regimes, and only one of them fills the root zone.
 
-    Three light passes over a seedbed wet the top centimetre and mostly go back to the air.
-    Counting them as irrigation would tell the balance the roots were filled and cancel the
-    dawn cycle the turf around the seed still needs, which is the failure that nearly killed
-    a real lawn during development.
+    Three light passes over a patch of new seed wet the top centimetre and mostly go back to
+    the air. Counting them as irrigation would tell the balance the roots were filled and
+    cancel the dawn cycle the turf around the seed still needs, which is the failure that
+    nearly killed a real lawn during development.
     """
     entry = await _setup(hass, field_data)
     await hass.services.async_call(
         DOMAIN,
         "log_sowing",
-        {"zone_id": only_zone(entry).zone_id, "kind": "overseed"},
+        {"zone_id": only_zone(entry).zone_id, "kind": "repair"},
         blocking=True,
     )
     # The plan for the coming dawn was decided before the sowing was recorded, and is kept
@@ -742,6 +742,46 @@ async def test_a_seedbed_pass_through_the_valve_is_not_credited_to_the_balance(
     page = only_zone(entry).diary.day(run_start.date().isoformat())
     assert page.get("seedbed_min", 0) > 0, "the pass was not recorded at all"
     assert not page.get("irrigation_mm"), "a seedbed pass was credited to the root zone"
+
+
+@pytest.mark.usefixtures("weather_service", "station")
+async def test_a_lawn_sown_all_over_is_watered_by_its_passes_and_not_at_dawn(
+    hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
+) -> None:
+    """Seed over the whole zone makes it a seedbed, and a seedbed has no dawn cycle.
+
+    Water put down at dawn is in the root zone by breakfast and the surface is dry by
+    eleven, which is the one centimetre the seed is living in. So the day's watering becomes
+    the passes themselves -- and being the watering, they are what the balance is credited
+    with, or the engine would ask for a cycle to fix a deficit that was never there.
+    """
+    entry = await _setup(hass, field_data)
+    await hass.services.async_call(
+        DOMAIN,
+        "log_sowing",
+        {"zone_id": only_zone(entry).zone_id, "kind": "overseed"},
+        blocking=True,
+    )
+    only_zone(entry).diary.today().pop("irrigation_plan", None)
+    await only_zone(entry).coordinator.async_refresh()
+    await _settle(hass, freezer)
+
+    plan = only_zone(entry).coordinator.data.irrigation_plan
+    assert plan.get("germination"), "a lawn sown today should be given its passes"
+    assert not plan.get("cycles"), "and no dawn cycle while the seed is coming up"
+    assert "seedbed_day_replaces_dawn_cycle" in plan["reasons"]
+
+    run_start = dt_util.parse_datetime(plan["germination"][0]["start"])
+    assert run_start is not None
+    freezer.move_to(run_start)
+    hass.states.async_set(VALVE, "on")
+    await _settle(hass, freezer)
+    freezer.tick(dt.timedelta(minutes=6))
+    hass.states.async_set(VALVE, "off")
+    await _settle(hass, freezer)
+
+    page = only_zone(entry).diary.day(run_start.date().isoformat())
+    assert page.get("irrigation_mm", 0) > 0, "the day's watering was not credited"
 
 
 @pytest.mark.usefixtures("weather_service", "station")
@@ -841,3 +881,39 @@ async def test_heat_reaches_a_plan_that_was_already_decided(
     assert plan["syringe"] is True
     assert plan["syringe_start"].endswith("13:00:00") or "T13:" in plan["syringe_start"]
     assert "midday_syringing_heat" in plan["reasons"]
+
+
+@pytest.mark.usefixtures("weather_service", "station")
+async def test_pre_germinated_seed_gets_the_tighter_schedule_through_the_service(
+    hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
+) -> None:
+    """What the sowing was recorded as has to reach the valve, not just the diary."""
+    entry = await _setup(hass, field_data)
+    await hass.services.async_call(
+        DOMAIN,
+        "log_sowing",
+        {
+            "zone_id": only_zone(entry).zone_id,
+            "kind": "overseed",
+            "pre_germinated": True,
+        },
+        blocking=True,
+    )
+    only_zone(entry).diary.today().pop("irrigation_plan", None)
+    await only_zone(entry).coordinator.async_refresh()
+    await _settle(hass, freezer)
+
+    runs = only_zone(entry).coordinator.data.irrigation_plan.get("germination") or []
+    assert len(runs) == 5, "chitted seed is wetted five times, not three"
+    assert [run["start"][11:16] for run in runs] == [
+        "09:00",
+        "11:00",
+        "13:00",
+        "15:00",
+        "17:00",
+    ]
+    # And the sensor says what the lawn is being given, rather than what a dawn cycle the
+    # day does not have would have been.
+    assert only_zone(entry).coordinator.data.irrigation_needed_mm == pytest.approx(
+        sum(run["mm"] for run in runs), abs=0.1
+    )

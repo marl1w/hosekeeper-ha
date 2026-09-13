@@ -107,6 +107,21 @@ in a humid temperate climate first, and generalised by hemisphere and grass clas
   each flush, 4.2 through the heat, 3.1 in late autumn — calibrated so the intervals a home
   lawn is usually given (10, 6, 9, 6, 12 days) come back at 75 mm, the middle of a
   cool-season range. Bounded to 3 to 21 days, since no home lawn is cut every other day.
+- **The height the lawn is actually cut at is the height the interval is worked out from.**
+  Advice written against the height the species wants, whatever the lawn had been cut to, is
+  a fiction on any lawn kept somewhere else: a sward taken down to 20 mm to open it before
+  seed was being told it had six days, which is what a 50 mm lawn gets. So a cut recorded
+  with its height sets the height the lawn is standing at, and the wait is how long the
+  season takes to grow the leaf from there to half again the height it is being cut to. A
+  height stays believed for a season — it is a setting on a machine and it persists — but no
+  longer, because a deck set in April says nothing about September after a summer of robot
+  sessions that record only their duration.
+- **A lawn below its species range is walked back up, not left there.** Scalping before seed
+  is deliberate and right; leaving a fescue at 20 mm is not. Raising the deck is free — the
+  grass grows into it, no leaf is removed — but it is not done in one step either, because a
+  leaf grown long and thin low down has to build the tissue to stand up at the new height.
+  Half again per cut is the third rule's allowance read in the other direction, and it lands
+  a scalped lawn back in its range in two or three cuts.
 - Overseeding is not sowing, and the mower is the place the difference shows. A lawn sown on
   bare soil has nothing to cut for about three weeks. A lawn overseeded still carries its own
   grass over the seed, and that grass has to be cut on time: left standing it shades the
@@ -171,12 +186,36 @@ in a humid temperate climate first, and generalised by hemisphere and grass clas
 
 ## Establishment — `knowledge/programme.py`
 
-- Overseeding an established lawn is two regimes at once: the turf around the seed still has
-  roots at depth and keeps its deep dawn cycle, while the seed needs the top centimetre damp.
-  Hosekeeper therefore adds short waterings of about 2 mm at 11:00, 14:00 and 17:00 for the
-  fortnight the seed takes to come up, and stops them before evening so the leaf dries before
-  dark. A lawn sown from bare soil has no established turf to water deeply, and gets the
-  light regime alone.
+- **Sowing a whole lawn makes it a seedbed, and a seedbed has no dawn cycle.** Water put
+  down before sunrise is in the root zone by breakfast and the top centimetre — the one the
+  seed is living in — is dry by eleven; and a run deep enough to refill a root zone is a run
+  that floats seed into the low corners and caps the surface the seedlings have to push
+  through. So for the fortnight the seed takes to come up the deep cycle gives way, and the
+  day's whole watering is the seedbed's passes: three of them, at 09:00, 13:00 and 17:00,
+  sized between them to cover what the root zone is down by, each held to a floor of about
+  2 mm so the surface stays damp on a cool day and to a ceiling of 6 mm — half what the same
+  soil would take in one go — so the seed stays where it was sown. Being the day's watering,
+  they are credited to the balance like any other water. The deep cycle comes back when the
+  seed is up, and with it the deep roots it is there to grow.
+- **Sowing a few bare patches does not.** The turf around them still has roots at depth and
+  still wants its cycle, so a repair keeps both regimes: the dawn cycle as usual, and light
+  2 mm passes over the patches that are surface water and stay out of the balance. Which of
+  the two jobs a sowing was is recorded with it rather than inferred.
+- **Pre-germinated (chitted) seed is a different schedule, not the same one hurried.** Seed
+  soaked and held warm until the radicle has just broken the coat comes up in three to five
+  days instead of seven to fourteen, which is why it is used late in the autumn window when
+  there is no longer time for the ordinary fortnight. What it buys in speed it gives up in
+  tolerance: dry seed is dormant and waits, but a radicle already out of the coat has no
+  reserve and no root, and one afternoon of a dry surface kills it outright. So for the first
+  five days it is wetted five times — 09:00, 11:00, 13:00, 15:00, 17:00 — in lighter passes,
+  never below the 1.5 mm that is about the least that reaches the top centimetre on a warm
+  afternoon. After emergence the seedling has a root of its own and drops back to the
+  ordinary three; keeping five passes on rooted seedlings is water spent on the air.
+  Whichever regime is running, the last pass is no later than 17:00: damping-off is the worse
+  risk on open seed, not the lesser one, and a seedbed wet all night grows it rather than
+  grass.
+- A lawn sown from bare soil has no established turf at all, and the establishment rule owns
+  its watering outright.
 - Rooting depth grows with the lawn and is not the depth the species reaches when mature.
   Sod is laid with two or three centimetres of soil and knits downward over a season; seed
   starts shallower still. The engine ramps the effective depth from 6 cm at laying, or 3 cm
@@ -187,7 +226,9 @@ in a humid temperate climate first, and generalised by hemisphere and grass clas
 - Sod: keep moist, roots take in two to three weeks, first mow once it cannot be lifted.
 - Seed: keep the surface moist, germination in 7 to 14 days for fescue and ryegrass, a lawn
   in about two months; starter fertilizer high in phosphorus at seeding. NC State and
-  Purdue extension establishment guides; Bottos Pro Start data sheet.
+  Purdue extension establishment guides; Bottos Pro Start data sheet. Pre-germination is the
+  Italian trade practice of *semina pregerminata*: 24 to 48 hours soaking with the water
+  changed, then drained and held warm until the radicle shows.
 
 ## Timing in the day — `engine/schedule.py`
 

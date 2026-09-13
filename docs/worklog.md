@@ -25,9 +25,12 @@ can be picked up without re-reading the whole history.
   October, so the same rule gives a deeper, less frequent watering in summer and a shallow,
   rare one in autumn. Dormant lawns are left alone unless a long drought threatens the
   crowns.
-- **Overseeding waters twice over.** The established turf keeps its deep dawn cycle; the
-  seed gets short waterings at 11:00, 14:00 and 17:00 for a fortnight. A lawn sown from bare
-  soil gets only the light regime.
+- **A lawn sown all over becomes a seedbed for a fortnight.** The deep dawn cycle gives way
+  and the day's whole watering is three passes at 09:00, 13:00 and 17:00, sized from the
+  deficit and credited to the balance. Seed pre-germinated before sowing is on five lighter
+  passes for its first five days. Only a spot repair keeps both regimes at once — dawn cycle
+  for the turf, uncredited surface passes over the patches. A lawn sown from bare soil gets
+  the establishment rule's light regime alone.
 - **Syringing is suggested**, and only for what it is: 1.5 mm at one in the afternoon on a
   day of heat stress or a forecast above 32 °C, to cool the canopy. It is not counted as
   irrigation in the balance.

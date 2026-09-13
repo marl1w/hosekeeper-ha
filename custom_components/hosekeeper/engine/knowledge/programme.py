@@ -12,6 +12,7 @@ warm months. See docs/knowledge.md for sources.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import datetime as dt
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,11 +112,39 @@ def mow_interval_days(phase: str, height_mm: float) -> int | None:
     Half the cutting height is the growth the third rule allows; the season's growth rate
     turns that into days.
     """
+    return days_to_grow(phase, height_mm, 1.5 * height_mm)
+
+
+def days_to_grow(phase: str, from_mm: float, to_mm: float) -> int | None:
+    """Return how many days this season takes to grow a leaf from one height to another.
+
+    The interval between two cuts is this with the third rule as its target, and it is the
+    general form because a lawn is not always cut at the height it is standing at. One taken
+    down to 20 mm to open the sward before seed and wanted back at 60 is not on any interval:
+    it is waiting to grow, and the wait is the distance divided by the season's growth.
+    """
     growth = GROWTH_MM_DAY.get(phase)
     if not growth:
         return None
     low, high = MOW_INTERVAL_BOUNDS
-    return int(min(max(round(0.5 * height_mm / growth), low), high))
+    return int(min(max(round(max(0.0, to_mm - from_mm) / growth), low), high))
+
+
+# Climbing back from a low cut.
+#
+# Taking a lawn down to the soil before seed is deliberate and right: it opens the sward,
+# gets the seed to the ground and stops the standing grass shading what comes up. What must
+# not happen is the lawn being left there. Going back up is not a cut at all -- the deck
+# rises and the grass grows into it -- but it is not done in one step either, because a leaf
+# grown long and thin at 20 mm and then kept at 60 is a leaf that has to build the tissue to
+# stand up on its own. Half again each time is the same allowance the third rule gives in
+# the other direction, and it lands a scalped lawn back in its range in two or three cuts.
+RAISE_FACTOR = 1.5
+
+
+def recovery_height(kept_mm: float, target_mm: int) -> int:
+    """Return the height the next cut is set to, climbing back towards the target."""
+    return min(target_mm, round(kept_mm * RAISE_FACTOR))
 
 
 def cutting_height(range_mm: tuple[int, int], *, taller: bool = False, lower: bool = False) -> int:
@@ -219,6 +248,92 @@ SOD_ROOTING_DAYS = 21
 MOWING_HELD_AFTER_SOWING_DAYS = 21
 SEED_GERMINATION_DAYS = 14
 SEED_ESTABLISHED_DAYS = 60
+
+# Pre-germinated seed, and what it costs to use it.
+#
+# Seed can be chitted before it goes down -- soaked and held warm and damp until the radicle
+# has just broken the coat. It comes up in three to five days instead of seven to fourteen,
+# which is why it is used late in the autumn window when there is no longer time for the
+# ordinary fortnight. What it buys in speed it gives up in tolerance: dry seed is dormant
+# and simply waits, but a radicle already out of the coat has no reserve and no root, and
+# one afternoon of a dry surface kills it outright rather than delaying it. So the seedbed
+# regime for chitted seed is not the ordinary one with the days renumbered -- it is lighter
+# and more frequent, because the surface may not be allowed to dry between passes at all.
+#
+# After emergence the seedling has a root of its own and the ordinary regime is enough; the
+# fortnight stands, because what the second week is for is a seedling too shallow to reach
+# the water the deep cycle puts down, and that is true however the seed was started.
+PRE_GERMINATED_CRITICAL_DAYS = 5
+
+
+@dataclass(frozen=True, slots=True)
+class SeedbedRegime:
+    """How often a seedbed is wetted through the day, and how much goes on each time."""
+
+    code: str
+    times: tuple[dt.time, ...]
+    mm: float
+
+    @property
+    def passes(self) -> int:
+        """Return how many times a day the seedbed is wetted."""
+        return len(self.times)
+
+    @property
+    def daily_mm(self) -> float:
+        """Return the depth the day's passes put on the surface between them."""
+        return round(self.passes * self.mm, 1)
+
+
+# The ordinary seedbed: three passes across the working day, the first once the dew has gone
+# and the last early enough that the leaf dries before dark, because a seedbed wet all night
+# grows damping-off rather than grass. They are spread rather than bunched into the afternoon
+# because between them they are the day's whole watering on a lawn that has been sown: the
+# morning is a third of the day the surface has to survive.
+STANDARD_SEEDBED = SeedbedRegime("standard", (dt.time(9, 0), dt.time(13, 0), dt.time(17, 0)), 2.0)
+
+# The chitted seedbed: five lighter passes over the same span, starting in the morning. The
+# same water in a day, spread so the top centimetre never gets the two hours it needs to dry
+# out, and the last pass no later -- damping-off is a worse risk on chitted seed, not a
+# lesser one.
+CHITTED_SEEDBED = SeedbedRegime(
+    "chitted",
+    (dt.time(9, 0), dt.time(11, 0), dt.time(13, 0), dt.time(15, 0), dt.time(17, 0)),
+    1.5,
+)
+
+
+def seedbed_depths(regime: SeedbedRegime, target_mm: float, cap_mm: float) -> list[float]:
+    """Return how deep each of the day's passes goes, to cover `target_mm` between them.
+
+    A sown lawn is not watered to a schedule of fixed millimetres. It has two jobs at once:
+    the surface has to stay damp, which is a floor under every pass however little the lawn
+    is using, and the root zone underneath still has to be replaced, which on a hot week is
+    more than the floor comes to. So the day's need is divided over the passes, held up to
+    the floor and down to what sown ground can take without the seed moving. What will not
+    fit is not forced into the day -- the surface would shed it -- and the balance carries
+    the rest into tomorrow, which is what it is for.
+    """
+    if not regime.passes:
+        return []
+    floor = min(regime.mm, cap_mm)
+    share = max(floor, min(cap_mm, target_mm / regime.passes))
+    return [round(share, 1)] * regime.passes
+
+
+def seedbed_regime(*, pre_germinated: bool, days_since_sowing: int | None) -> SeedbedRegime:
+    """Return the regime a seedbed is on today.
+
+    Chitted seed gets the intensive regime until it is up, and the ordinary one after that:
+    keeping five passes a day on a lawn of rooted seedlings is water spent on the air.
+    """
+    if not pre_germinated:
+        return STANDARD_SEEDBED
+    if days_since_sowing is not None and days_since_sowing > PRE_GERMINATED_CRITICAL_DAYS:
+        return STANDARD_SEEDBED
+    return CHITTED_SEEDBED
+
+
 # How long after sowing a feed is still the seed's starter feed.
 #
 # Seedlings root on phosphorus and they root in the first month; after that the calendar

@@ -78,6 +78,23 @@ def max_single_application(soil_type: str) -> float:
     return MAX_SINGLE_APPLICATION_MM.get(soil_type, MAX_SINGLE_APPLICATION_MM["loam"])
 
 
+# The most one pass may put on a seedbed.
+#
+# What limits a run over sown ground is not the soil's intake but the seed lying on top of
+# it. Water arriving faster than the surface can take it moves before it soaks in, and what
+# it moves is the seed: into the low corners, out of the high ones, and down any slope there
+# is. It also caps the surface, and a crusted surface is what a seedling cannot push through.
+# So a seedbed pass is held to half of what the same soil would take in one go, and to six
+# millimetres whatever the soil, which is about what a gentle rotor lays down in a quarter of
+# an hour and the point past which extension guides stop calling it a light watering.
+SEEDBED_MAX_PASS_MM = 6.0
+
+
+def max_seedbed_application(soil_type: str) -> float:
+    """Return the most one pass should put on sown ground without moving the seed."""
+    return min(SEEDBED_MAX_PASS_MM, max_single_application(soil_type) / 2.0)
+
+
 # Rain below this over a day mostly wets leaves and the top few millimetres and is gone
 # by noon; it does not reach the roots.
 RAIN_THRESHOLD_MM = 2.0

@@ -42,6 +42,7 @@ SOWING_SCHEMA = vol.Schema(
     {
         **_ENTRY,
         vol.Optional("kind", default="overseed"): vol.In(("overseed", "new_lawn", "repair")),
+        vol.Optional("pre_germinated", default=False): cv.boolean,
         vol.Optional("seed_mix"): cv.string,
         vol.Optional("rate_g_m2"): vol.All(vol.Coerce(float), vol.Range(min=1, max=200)),
         vol.Optional("notes"): cv.string,
@@ -171,7 +172,7 @@ async def async_register(hass: HomeAssistant) -> None:
     async def log_sowing(call: ServiceCall) -> None:
         coordinator = _coordinator(hass, call)
         await coordinator.async_log_maintenance(
-            "sowing", _details(call, "kind", "seed_mix", "rate_g_m2", "notes")
+            "sowing", _details(call, "kind", "pre_germinated", "seed_mix", "rate_g_m2", "notes")
         )
 
     async def log_maintenance(call: ServiceCall) -> None:

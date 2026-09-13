@@ -120,13 +120,26 @@ def project(
     advised_now = next((a for a in advice if a.code == "irrigate_now"), None)
     deficit = ctx.deficit_mm
     # The seedbed's own regime, so the picture agrees with the agenda about what is being
-    # put on the lawn. It is drawn, not credited: see DayProjection.seedbed_mm.
+    # put on the lawn.
     seedbed_left = (
         programme.SEED_GERMINATION_DAYS - (ctx.days_since_sowing or 0)
         if ctx.germinating and not ctx.new_lawn
         else 0
     )
-    seedbed_daily = len(schedule.GERMINATION_TIMES) * schedule.GERMINATION_MM
+    regime = ctx.seedbed
+    seedbed_cap = water.max_seedbed_application(ctx.soil_type)
+    # A lawn sown all over has no dawn cycle for the fortnight: its passes are the day's
+    # watering, and the deeper ones among them reach the root zone and are credited like any
+    # other water. A few patches sown into standing turf get the passes as well as the cycle,
+    # and those are surface water throughout: drawn, never credited. See DayProjection.
+    seedbed_day = seedbed_left > 0 and ctx.seedbed_covers_zone
+
+    def seedbed_for(target_mm: float) -> tuple[float, float]:
+        """Return what a day's passes put on the lawn, as (into the balance, on the surface)."""
+        depths = programme.seedbed_depths(regime, target_mm if seedbed_day else 0.0, seedbed_cap)
+        total = round(sum(depths), 1)
+        return (total, 0.0) if seedbed_day else (0.0, total)
+
     out: list[DayProjection] = []
 
     for offset in range(BALANCE_DAYS):
@@ -135,11 +148,15 @@ def project(
         kc = grass.crop_coefficient(ctx.grass_type, date.month, ctx.northern_hemisphere)
         etc = _et_for(fc, latitude, kc) if fc else ctx.etc_today_mm
         rain = expected_rain(fc.rain_mm if fc else None, ctx.skill)
-        seedbed = seedbed_daily if offset < seedbed_left else 0.0
+        sowing_today = offset < seedbed_left
         if offset == 0:
             # Today's rain and water use are already in the deficit the coordinator handed
-            # over; only tonight's cycle is still to come.
-            irrigation = float(advised_now.params.get("mm", 0.0)) if advised_now else 0.0
+            # over; only what is still to run is to come.
+            irrigation, surface = 0.0, 0.0
+            if sowing_today:
+                irrigation, surface = seedbed_for(ctx.seedbed_target_mm)
+            if not (sowing_today and seedbed_day):
+                irrigation += float(advised_now.params.get("mm", 0.0)) if advised_now else 0.0
             deficit = water.next_deficit(deficit, 0.0, 0.0, irrigation, soil)
             out.append(
                 DayProjection(
@@ -148,18 +165,25 @@ def project(
                     ctx.etc_today_mm,
                     irrigation,
                     deficit,
-                    seedbed,
+                    surface,
                     fc is not None,
                 )
             )
             continue
         irrigation = 0.0
-        if not dormant and deficit + etc - water.effective_rain(rain) >= threshold:
+        surface = 0.0
+        wanted = deficit + etc - water.effective_rain(rain)
+        if sowing_today:
+            # The seedbed is put back to full every day rather than run down to a threshold:
+            # the seed lives in the top centimetre, which is either damp or it is not.
+            irrigation, surface = seedbed_for(wanted)
+        if not (sowing_today and seedbed_day) and not dormant and wanted >= threshold:
+            # A lawn whose seed is only in patches still has its dawn cycle to run.
             candidate = round(max(0.0, deficit * ctx.irrigation_factor - rain))
             if candidate >= 3:
-                irrigation = float(candidate)
+                irrigation += float(candidate)
         deficit = water.next_deficit(deficit, etc, rain, irrigation, soil)
-        out.append(DayProjection(date, rain, etc, irrigation, deficit, seedbed, fc is not None))
+        out.append(DayProjection(date, rain, etc, irrigation, deficit, surface, fc is not None))
     return out
 
 
@@ -224,12 +248,21 @@ def build(
             date = ctx.today + dt.timedelta(days=offset)
             if offset == 0 and "seedbed_watering" in ctx.done_today:
                 continue  # done today; tomorrow asks again
+            regime = ctx.seedbed
+            depths = ctx.seedbed_depths_mm
             items.append(
                 AgendaItem(
                     date.isoformat(),
                     "germination_watering",
                     "irrigation",
-                    {"times": len(schedule.GERMINATION_TIMES), "mm": schedule.GERMINATION_MM},
+                    {
+                        "times": regime.passes,
+                        "mm": depths[0] if depths else regime.mm,
+                        # The hours the regime runs to, so a day still to be decided is drawn
+                        # the way the morning will actually lay it out. Chitted seed is on
+                        # five of them, not the ordinary three.
+                        "hours": [at.strftime("%H:%M") for at in regime.times],
+                    },
                     ("keep_the_seedbed_damp",),
                 )
             )

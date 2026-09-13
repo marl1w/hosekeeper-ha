@@ -1,5 +1,5 @@
 {
-  "_comment": "The sample lawn the preview shows when no local one is present. One lawn in three zones, cool-season turf, laid as sod in June and overseeded at the end of August, which is the case that exercises most of the engine: a shallow root zone, two watering regimes at once, and a mower held off new seed. What the whole lawn shares sits at the top, as it does in the config flow; a zone may still override any of it. Put your own in scripts/local/lawn.json, which is ignored by git.",
+  "_comment": "The sample lawn the preview shows when no local one is present. One lawn in three zones, cool-season turf, laid as sod in June and sown at the end of August, which is the case that exercises most of the engine: a shallow root zone, a mower held off new seed, and all three seedbed regimes at once -- the north lawn oversown with dry seed, the west with pre-germinated seed on its tighter schedule, and the south patched in places, which is the one case that keeps its dawn cycle. What the whole lawn shares sits at the top, as it does in the config flow; a zone may still override any of it. Put your own in scripts/local/lawn.json, which is ignored by git.",
   "latitude": 45.0,
   "longitude": 9.0,
   "elevation": 100,
@@ -50,7 +50,8 @@
         "2026-07-28",
         "2026-07-18"
       ],
-      "sown_on": "2026-08-30",
+      "sown_on": "2026-09-04",
+      "pre_germinated": true,
       "valve_entity": "switch.west_lawn_valve"
     },
     {
@@ -71,6 +72,7 @@
         "2026-07-18"
       ],
       "sown_on": "2026-08-30",
+      "sowing_kind": "repair",
       "valve_entity": "switch.south_lawn_valve"
     }
   ]

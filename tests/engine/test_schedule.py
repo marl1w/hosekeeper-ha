@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 
 from custom_components.hosekeeper.engine import schedule
+from custom_components.hosekeeper.engine.knowledge import programme
 
 TZ = dt.timezone(dt.timedelta(hours=2))
 SUNRISE = dt.datetime(2026, 9, 7, 6, 58, tzinfo=TZ)
@@ -189,8 +190,8 @@ def test_a_sown_lawn_keeps_its_dawn_cycle_and_gets_the_seedbed_damp() -> None:
     assert all(c.mm == schedule.GERMINATION_MM for c in plan.germination)
     assert plan.germination[-1].end.time() < dt.time(18, 0), "the leaf must dry before dark"
     assert "keep_the_seedbed_damp" in plan.reasons
-    assert plan.active_cycle(dt.datetime(2026, 9, 7, 14, 2, tzinfo=TZ)) == "germination"
-    assert plan.next_start(dt.datetime(2026, 9, 7, 8, 0, tzinfo=TZ)).time() == dt.time(11, 0)
+    assert plan.active_cycle(dt.datetime(2026, 9, 7, 13, 2, tzinfo=TZ)) == "germination"
+    assert plan.next_start(dt.datetime(2026, 9, 7, 8, 0, tzinfo=TZ)).time() == dt.time(9, 0)
 
 
 def test_seedbed_passes_can_be_queued_behind_another_lawn() -> None:
@@ -205,8 +206,8 @@ def test_seedbed_passes_can_be_queued_behind_another_lawn() -> None:
     second = schedule.germination_cycles(
         day, tz, minutes_per_mm=3.0, offset=dt.timedelta(minutes=6)
     )
-    assert [c.start.strftime("%H:%M") for c in first] == ["11:00", "14:00", "17:00"]
-    assert [c.start.strftime("%H:%M") for c in second] == ["11:06", "14:06", "17:06"]
+    assert [c.start.strftime("%H:%M") for c in first] == ["09:00", "13:00", "17:00"]
+    assert [c.start.strftime("%H:%M") for c in second] == ["09:06", "13:06", "17:06"]
     # Queued, not overlapping: the second lawn starts when the first one is done.
     assert second[0].start >= first[0].end
     assert [c.minutes for c in second] == [c.minutes for c in first]
@@ -231,3 +232,49 @@ def test_a_revised_plan_says_which_way_the_day_went() -> None:
     plan = schedule.IrrigationPlan(date=dt.date(2026, 9, 8), cycles=(), reasons=("planned",))
     assert "revised_rain_since" in schedule.revised(plan, wetter=True).reasons
     assert "revised_drier_since" in schedule.revised(plan, wetter=False).reasons
+
+
+def test_a_chitted_seedbed_gets_more_passes_and_lighter_ones() -> None:
+    """Seed already open cannot be left to dry between two long gaps."""
+    plan = schedule.irrigation_plan(
+        date=dt.date(2026, 9, 7),
+        sunrise=SUNRISE,
+        needed_mm=10.0,
+        minutes_per_mm=4.0,
+        heat_stress=False,
+        forecast_tmax=24.0,
+        dormant=False,
+        soil_type="loam",
+        germinating=True,
+        seedbed=programme.CHITTED_SEEDBED,
+    )
+    assert [c.start.time() for c in plan.germination] == list(programme.CHITTED_SEEDBED.times)
+    assert all(c.mm == programme.CHITTED_SEEDBED.mm for c in plan.germination)
+    assert len(plan.germination) > len(programme.STANDARD_SEEDBED.times)
+    # The leaf still has to dry before dark, and the deep cycle the surrounding turf needs
+    # is untouched by any of it.
+    assert plan.germination[-1].end.time() < dt.time(18, 0)
+    assert plan.cycles, "the turf around the seed still has deep roots"
+    assert "chitted_seed_cannot_dry" in plan.reasons
+    assert "keep_the_seedbed_damp" in plan.reasons
+
+
+def test_the_seedbed_a_settled_plan_gains_is_the_regime_the_day_is_on() -> None:
+    """Seed goes down after the morning's plan was made; which seed it was still counts."""
+    settled = schedule.irrigation_plan(
+        date=dt.date(2026, 9, 7),
+        sunrise=SUNRISE,
+        needed_mm=10.0,
+        minutes_per_mm=4.0,
+        heat_stress=False,
+        forecast_tmax=24.0,
+        dormant=False,
+        soil_type="loam",
+    )
+    assert not settled.germination
+    sown = schedule.with_germination(settled, TZ, 4.0, dt.timedelta(), programme.CHITTED_SEEDBED)
+    assert len(sown.germination) == programme.CHITTED_SEEDBED.passes
+    assert "chitted_seed_cannot_dry" in sown.reasons
+    # And the watering that was decided this morning is still exactly the one decided.
+    assert sown.cycles == settled.cycles
+    assert sown.main_mm == settled.main_mm

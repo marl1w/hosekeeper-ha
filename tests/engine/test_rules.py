@@ -5,7 +5,8 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
-from custom_components.hosekeeper.engine import agenda, climate, rules
+from custom_components.hosekeeper.engine import agenda, climate, rules, water
+from custom_components.hosekeeper.engine.knowledge import programme
 from custom_components.hosekeeper.engine.phenology import Phenology
 
 
@@ -340,14 +341,23 @@ def test_shade_changes_the_mix_the_height_and_the_autumn_chores() -> None:
     assert "moss_control_now" in _codes(moss)
 
 
-def test_overseeding_keeps_the_deep_cycle_and_adds_seedbed_watering() -> None:
-    # Seed sown into an established lawn three days ago.
-    advice = rules.evaluate(_ctx(days_since_sowing=3, deficit_mm=25.0))
+def test_patching_bare_spots_keeps_the_deep_cycle_and_adds_seedbed_watering() -> None:
+    """Seed in a few bare spots does not turn the lawn around them into a seedbed."""
+    advice = rules.evaluate(_ctx(days_since_sowing=3, sowing_kind="repair", deficit_mm=25.0))
     codes = _codes(advice)
     assert "irrigate_now" in codes, "the turf around the seed still has deep roots"
     seedbed = next(a for a in advice if a.code == "germination_watering")
     assert seedbed.params["days_left"] == 11
     assert seedbed.horizon == "today"
+
+
+def test_a_lawn_sown_all_over_is_not_told_to_water_twice() -> None:
+    """The passes are the day's watering, so the dawn cycle must not be advised as well."""
+    advice = rules.evaluate(_ctx(days_since_sowing=3, sowing_kind="overseed", deficit_mm=25.0))
+    codes = _codes(advice)
+    assert "germination_watering" in codes
+    assert "irrigate_now" not in codes
+    assert "irrigation_due_soon" not in codes
 
 
 def test_a_brand_new_seeded_lawn_only_gets_the_seedbed_regime() -> None:
@@ -402,3 +412,113 @@ def test_the_robot_waits_for_the_seed_to_root_but_the_lawn_is_still_cut() -> Non
         days_since_sowing=15, establishment_age_days=100, days_since_mowing=9, robot_mower=True
     )
     assert "mow_by_hand_while_seed_roots" not in _codes(rules.evaluate(rooted))
+
+
+def test_pre_germinated_seed_is_watered_more_often_than_dry_seed() -> None:
+    """Chitted seed has no reserve: the advice has to ask for more passes, not the same three."""
+    chitted = rules.evaluate(_ctx(days_since_sowing=2, sown_pre_germinated=True, deficit_mm=25.0))
+    seedbed = next(a for a in chitted if a.code == "germination_watering")
+    assert seedbed.params["times"] == programme.CHITTED_SEEDBED.passes
+    assert seedbed.params["mm"] >= programme.CHITTED_SEEDBED.mm, "never below the damp floor"
+    assert "chitted_seed_cannot_dry" in seedbed.reasons
+
+    dry = rules.evaluate(_ctx(days_since_sowing=2, deficit_mm=25.0))
+    ordinary = next(a for a in dry if a.code == "germination_watering")
+    assert ordinary.params["times"] == programme.STANDARD_SEEDBED.passes
+    assert "chitted_seed_cannot_dry" not in ordinary.reasons
+    # Same water to put back either way; the chitted day divides it into more, smaller goes.
+    assert seedbed.params["mm"] < ordinary.params["mm"]
+
+
+def test_a_lawn_sown_all_over_is_watered_by_its_seedbed_and_not_at_dawn_as_well() -> None:
+    """The passes are the day's watering, sized from the deficit, not two millimetres of damp."""
+    whole = _ctx(days_since_sowing=2, sowing_kind="overseed", deficit_mm=12.0)
+    assert whole.seedbed_covers_zone
+    assert whole.seedbed_target_mm == 12.0
+    seedbed = next(a for a in rules.evaluate(whole) if a.code == "germination_watering")
+    assert seedbed.params["daily_mm"] == 12.0, "the day's passes cover what the root zone lost"
+    assert seedbed.params["minutes"] == 16, "4 mm a pass at 4 minutes a millimetre"
+    assert "seedbed_day_replaces_dawn_cycle" in seedbed.reasons
+
+    # A few patches sown into standing turf is the other job: the passes stay surface water
+    # and the lawn around them keeps the deep cycle it still needs.
+    patches = _ctx(days_since_sowing=2, sowing_kind="repair", deficit_mm=25.0)
+    assert not patches.seedbed_covers_zone
+    assert patches.seedbed_target_mm == 0.0
+    advice = rules.evaluate(patches)
+    patched = next(a for a in advice if a.code == "germination_watering")
+    assert patched.params["mm"] == programme.STANDARD_SEEDBED.mm
+    assert "seedbed_day_replaces_dawn_cycle" not in patched.reasons
+    assert "irrigate_now" in _codes(advice), "the turf around the patches has deep roots"
+
+
+def test_a_seedbed_pass_is_never_heavy_enough_to_move_the_seed() -> None:
+    """A dry spell does not turn three light passes into three runs that wash the seed about."""
+    parched = _ctx(days_since_sowing=2, sowing_kind="overseed", deficit_mm=40.0)
+    depths = parched.seedbed_depths_mm
+    assert max(depths) <= water.max_seedbed_application("loam")
+    # What will not fit is not forced into the day; the balance carries it to tomorrow.
+    assert sum(depths) < parched.seedbed_target_mm
+
+
+def test_chitted_seed_drops_back_to_the_ordinary_regime_once_it_is_up() -> None:
+    up = programme.PRE_GERMINATED_CRITICAL_DAYS + 2
+    advice = rules.evaluate(_ctx(days_since_sowing=up, sown_pre_germinated=True, deficit_mm=25.0))
+    seedbed = next(a for a in advice if a.code == "germination_watering")
+    assert seedbed.params["times"] == programme.STANDARD_SEEDBED.passes
+
+
+def test_an_overseeding_is_taken_at_its_word_when_the_lawn_has_no_birthday() -> None:
+    """The recorded kind beats the arithmetic, which needs an establishment date to work.
+
+    A blank establishment date used to turn every overseeding into a bare-soil sowing and
+    hold the mower for three weeks over turf that had to keep being cut, or it shades the
+    seedlings it was sown into out.
+    """
+    sown = _ctx(
+        days_since_sowing=4,
+        establishment_age_days=None,
+        sowing_kind="overseed",
+        days_since_mowing=6,
+    )
+    assert sown.overseeded
+    assert not rules.mower_held(sown)
+    assert "hold_mowing_after_sowing" not in _codes(rules.evaluate(sown))
+
+    # And a lawn sown from bare soil says so, and keeps the mower off.
+    bare = _ctx(days_since_sowing=4, establishment_age_days=None, sowing_kind="new_lawn")
+    assert not bare.overseeded
+    assert rules.mower_held(bare)
+
+
+def test_a_lawn_scalped_before_seed_is_walked_back_up_not_left_there() -> None:
+    """20 mm is right for getting seed to the soil and wrong for a fescue to live at."""
+    scalped = _ctx(last_mow_height_mm=20, days_since_mowing=1)
+    advice = rules.evaluate(scalped)
+    climb = next(a for a in advice if a.code == "raise_height_after_low_cut")
+    assert climb.params["kept_mm"] == 20
+    assert climb.params["target_mm"] == 75, "the middle of the 60-90 range this fescue wants"
+    assert climb.params["height_mm"] == 30, "half again, not the whole way in one cut"
+    assert "cut_below_species_range" in climb.reasons
+    assert "mowing_height" not in _codes(advice)
+
+
+def test_the_cut_that_was_made_sets_the_interval_not_the_one_that_was_wanted() -> None:
+    """The wait is the distance from where the lawn stands to where a cut takes a third off.
+
+    Both these lawns are cut to the same 75 mm and both were last cut three days ago; what
+    differs is where they are standing, which is the one thing the advice used not to know.
+    The third rule trips at half again the height being cut to, so the lawn left long is
+    nearly there and the lawn taken low has most of the distance still to grow.
+    """
+    standing_tall = _ctx(last_mow_height_mm=90, days_since_mowing=3)
+    standing_low = _ctx(last_mow_height_mm=60, days_since_mowing=3)
+    assert standing_tall.kept_height_mm == 90
+    assert standing_low.kept_height_mm == 60
+
+    sooner = next(a for a in rules.evaluate(standing_tall) if a.code == "mowing_height")
+    later = next(a for a in rules.evaluate(standing_low) if a.code == "mowing_height")
+    assert sooner.params["next_in_days"] < later.params["next_in_days"]
+
+    # With nothing recorded the target is still the best guess there is.
+    assert _ctx().kept_height_mm == 75

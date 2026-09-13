@@ -99,6 +99,29 @@ export function recordDialog(
     s.ui.seedRate,
     el("span", { class: "record__inline" }, rate, el("span", { class: "water__unit" }, "g/m²"))
   );
+  // Which of the two jobs that share the word "sowing" this was. It decides whether the
+  // mower is held off for three weeks or keeps cutting on time, so it is asked rather than
+  // guessed: seed into standing turf leaves that turf to be cut, and it shades the seedlings
+  // out if it is not.
+  const sowingKind = el(
+    "select",
+    { class: "record__select", id: "hk-record-sowing-kind" },
+    ["overseed", "new_lawn", "repair"].map((kind) =>
+      el("option", { value: kind }, lookup(lang, "sowingKinds", kind))
+    )
+  );
+  const sowingKindRow = field(s.ui.sowingKind, sowingKind);
+  // Chitted seed is up in days rather than a fortnight and has no reserve left to wait on:
+  // it changes how often the seedbed is wetted, so it is worth asking. Two named options
+  // rather than a checkbox, which a phone renders as a tick nobody can see the meaning of.
+  const seedState = el(
+    "select",
+    { class: "record__select", id: "hk-record-seed-state" },
+    ["dry", "pre_germinated"].map((state) =>
+      el("option", { value: state }, lookup(lang, "seedStates", state))
+    )
+  );
+  const seedStateRow = field(s.ui.seedState, seedState);
 
   /** The month's planned feed for a lawn, which is what a feed is most likely to be. */
   const plannedFeed = (zoneId) =>
@@ -114,6 +137,7 @@ export function recordDialog(
     heightRow.hidden = what !== "mowing";
     productRow.hidden = doseRow.hidden = what !== "fertilizing";
     mixRow.hidden = rateRow.hidden = what !== "sowing";
+    sowingKindRow.hidden = seedStateRow.hidden = what !== "sowing";
     if (what === WATERING) {
       minutes.value = String(Math.round(first?.state?.irrigation_today_min || 0));
     }
@@ -147,7 +171,8 @@ export function recordDialog(
   const detailsFor = (what) => {
     if (what === "mowing") return height.value ? { height_mm: Number(height.value) } : {};
     if (what === "sowing") {
-      const out = {};
+      const out = { kind: sowingKind.value };
+      if (seedState.value === "pre_germinated") out.pre_germinated = true;
       if (mix.value) out.seed_mix = mix.value;
       if (rate.value) out.rate_g_m2 = Number(rate.value);
       return out;
@@ -169,6 +194,8 @@ export function recordDialog(
       heightRow,
       productRow,
       doseRow,
+      sowingKindRow,
+      seedStateRow,
       mixRow,
       rateRow,
       el("div", { class: "section__hint" }, s.ui.recordHint),

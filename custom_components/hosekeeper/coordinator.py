@@ -481,11 +481,18 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             self.diary.add_irrigation(minutes, mm, "valve")
 
     def _surface_cycle(self, started: dt.datetime, ended: dt.datetime) -> bool:
-        """Return whether a valve run belonged to a seedbed pass or a midday syringing.
+        """Return whether a valve run wetted the surface without reaching the root zone.
 
         A plan is made for the coming dawn and filed on the page of the day it was decided,
         so the plan covering a run is on that day's page or on the one before it. Looking
         only at the run's own page found tomorrow's plan and matched nothing.
+
+        A syringing always is surface water: a millimetre and a half on a hot afternoon is
+        gone by four. A seedbed pass depends on what kind of day it belongs to. Over a patch
+        of seed in standing turf it is surface water too, and the dawn cycle above it is
+        doing the root zone's work. On a lawn sown all over there is no dawn cycle and these
+        passes are the whole of the watering: refusing to credit them would leave the balance
+        believing the lawn had gone a fortnight dry and asking for a cycle to fix it.
         """
         wanted = started.date().isoformat()
         for offset in (0, 1):
@@ -500,7 +507,10 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             # The middle of the run, so a valve opened a moment early is still judged by the
             # cycle it actually served.
             middle = started + (ended - started) / 2
-            return plan.active_cycle(middle) in ("germination", "syringe")
+            cycle = plan.active_cycle(middle)
+            if cycle == "syringe":
+                return True
+            return cycle == "germination" and not plan.seedbed_day
         return False
 
     def _track_mower(self, old: str | None, new: str, now: dt.datetime) -> None:
@@ -656,6 +666,7 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             mower_entity=self.field.mower_entity,
         )
 
+        day_water = irrigation.planned_mm if irrigation.seedbed_day else needed_mm
         return FieldState(
             day=today_key,
             et0_mm=round(result.et0_mm, 2),
@@ -676,8 +687,11 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             raw_mm=round(soil.raw_mm, 1),
             root_depth_m=result.root_depth_m,
             available_fraction=soil.available_fraction(deficit),
-            irrigation_needed_mm=round(needed_mm, 1),
-            irrigation_needed_min=_round_or_none(self.field.mm_to_minutes(needed_mm)),
+            # What the lawn is actually being given today. On an ordinary day that is what
+            # the balance asked for; on a seedbed day the passes are the watering, and a
+            # sensor reading zero while the valve runs five times is one nobody can use.
+            irrigation_needed_mm=round(day_water, 1),
+            irrigation_needed_min=_round_or_none(self.field.mm_to_minutes(day_water)),
             forecast_rain_24h_mm=result.forecast_rain_24h_mm,
             forecast_rain_3d_mm=result.forecast_rain_72h_mm,
             rain_7d_mm=round(sum(day.get("rain_mm", 0.0) for _, day in window), 1),
@@ -756,11 +770,20 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             # while the water is still to run, since a cycle already under way cannot be
             # taken back. It used to be five millimetres of rain or nothing: 4.9 mm changed
             # nothing at all and 5 mm cancelled the whole watering.
-            running = current.main_start is not None and now >= current.main_start
+            # A seedbed day is judged on its passes, which are its whole watering, and it
+            # has started once the first of them has: the same test, on the regime the day
+            # is actually on rather than on a dawn cycle it does not have.
+            first_start = (
+                current.germination[0].start
+                if current.seedbed_day and current.germination
+                else current.main_start
+            )
+            wanted = result.seedbed_target_mm if current.seedbed_day else needed_mm
+            running = first_start is not None and now >= first_start
             rate = self.field.application_rate_mm_h
             minutes_per_mm = (60.0 / rate) if rate else None
-            if not running and schedule.worth_rethinking(current.main_mm, needed_mm):
-                revision = needed_mm < current.main_mm
+            if not running and schedule.worth_rethinking(current.planned_mm, wanted):
+                revision = wanted < current.planned_mm
         if revision is None and stored and stored.get("date") == target_date.isoformat():
             # Heat does not always announce itself in time. The watering is decided once and
             # kept, so its depth cannot wobble; a syringing is a millimetre and a half that
@@ -776,6 +799,10 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
                     sunrise.tzinfo,
                     minutes_per_mm,
                     self._germination_offset(target_date),
+                    result.seedbed,
+                    whole_zone=result.seedbed_covers_zone,
+                    target_mm=result.seedbed_target_mm,
+                    soil_type=self.field.soil_type,
                 )
             today["irrigation_plan"] = current.as_dict()
             self._chain_register(
@@ -811,6 +838,13 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             # finish. Three lawns all starting at eleven means the second and third get
             # whatever pressure is left.
             germination_offset=self._germination_offset(target_date),
+            # Chitted seed is wetted more often and more lightly than dry seed: the radicle
+            # is already out of the coat and one dry afternoon kills it outright.
+            seedbed=result.seedbed,
+            # And a lawn sown all over has no dawn cycle for the fortnight: these passes are
+            # the whole of its watering, so they carry what the root zone is down by.
+            seedbed_whole_zone=result.seedbed_covers_zone,
+            seedbed_target_mm=result.seedbed_target_mm,
         )
         if revision is not None:
             fresh = schedule.revised(fresh, wetter=revision)
@@ -918,6 +952,13 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             irrigation.main_end,
             irrigation.syringe_start if irrigation.syringe else None,
             irrigation.syringe_end if irrigation.syringe else None,
+            # The seedbed's passes are runs like any other and an automation acts on them the
+            # same way. Without their edges here the activity sensor only reported a pass
+            # when something else happened to refresh the coordinator during it, which on a
+            # seven-minute run is most of the time never -- the valve was told to open by a
+            # state that had already gone back to idle.
+            *(cycle.start for cycle in irrigation.germination),
+            *(cycle.end for cycle in irrigation.germination),
         ]
         for edge in edges:
             if edge is not None and edge > now:

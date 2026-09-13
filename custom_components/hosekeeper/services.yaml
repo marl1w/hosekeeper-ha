@@ -78,6 +78,11 @@ log_sowing:
             - overseed
             - new_lawn
             - repair
+    pre_germinated:
+      required: false
+      default: false
+      selector:
+        boolean:
     seed_mix:
       required: false
       selector:

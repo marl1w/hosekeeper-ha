@@ -226,6 +226,7 @@
           "mow_soon": "Taglia nei prossimi giorni",
           "mow_now_third_rule": "Taglia ora",
           "mowing_height": "Altezza di taglio",
+          "raise_height_after_low_cut": "Rialza l'altezza di taglio",
           "feed_recently_done": "Concimato di recente",
           "feed_wait": "Attendi per concimare",
           "feed_now": "Concima ora",
@@ -326,6 +327,10 @@
         "kind": {
           "name": "Tipo",
           "description": "Trasemina, nuovo impianto o riparazione di chiazze."
+        },
+        "pre_germinated": {
+          "name": "Seme pregerminato",
+          "description": "Seme messo a bagno e pregerminato prima della semina: nasce in pochi giorni e non deve mai asciugare."
         },
         "seed_mix": {
           "name": "Miscuglio",

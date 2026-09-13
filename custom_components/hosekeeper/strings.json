@@ -226,6 +226,7 @@
           "mow_soon": "Mow in the next days",
           "mow_now_third_rule": "Mow now",
           "mowing_height": "Mowing height",
+          "raise_height_after_low_cut": "Raise the cutting height",
           "feed_recently_done": "Recently fertilized",
           "feed_wait": "Wait to fertilize",
           "feed_now": "Fertilize now",
@@ -326,6 +327,10 @@
         "kind": {
           "name": "Kind",
           "description": "Overseeding, a new lawn or a spot repair."
+        },
+        "pre_germinated": {
+          "name": "Pre-germinated seed",
+          "description": "The seed was soaked and chitted before sowing: it comes up in days and must never dry out."
         },
         "seed_mix": {
           "name": "Seed mix",

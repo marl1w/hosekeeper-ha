@@ -101,6 +101,21 @@ class Assessment:
         """Return whether seed sown here is still coming up."""
         return self.context.germinating
 
+    @property
+    def seedbed(self) -> programme.SeedbedRegime:
+        """Return how often the seedbed is to be wetted today, and how deep each pass is."""
+        return self.context.seedbed
+
+    @property
+    def seedbed_covers_zone(self) -> bool:
+        """Return whether the seed went down over the whole zone rather than in patches."""
+        return self.context.seedbed_covers_zone
+
+    @property
+    def seedbed_target_mm(self) -> float:
+        """Return what the day's seedbed passes have to cover between them."""
+        return self.context.seedbed_target_mm
+
 
 def recent(
     days: dict[str, Any], count: int, until: dt.date
@@ -127,6 +142,40 @@ def last_deficit(days: dict[str, Any], before: str, within_days: int = 7) -> flo
         if value is not None:
             return float(value)
     return None
+
+
+# How long a recorded cutting height is believed.
+#
+# The height is a setting on a machine and it persists, so the last one written down is the
+# lawn's height until somebody says otherwise. What it is not is a fact about a different
+# season: a deck set in April and never mentioned again through a summer of robot sessions
+# that record only their duration says nothing about where the lawn stands in September. A
+# season is the longest that answer stays useful.
+MOW_HEIGHT_MEMORY_DAYS = 90
+
+
+def last_details(
+    days: dict[str, Any], kind: str, *, having: str | None = None, not_before: dt.date | None = None
+) -> dict[str, Any]:
+    """Return what was written down about the last `kind` recorded, or an empty mapping.
+
+    `having` skips records that do not carry a particular detail, which is what lets a cut
+    entered by hand with its height stand as the lawn's height through the robot sessions
+    logged after it, each of which knows its own duration and nothing about the deck.
+    `not_before` stops the search at a date, for answers that go stale.
+    """
+    floor = not_before.isoformat() if not_before else None
+    for key in sorted(days, reverse=True):
+        if floor is not None and key < floor:
+            return {}
+        for item in reversed(days[key].get("maintenance", [])):
+            if item.get("type") != kind:
+                continue
+            details = item.get("details") or {}
+            if having is not None and details.get(having) is None:
+                continue
+            return details
+    return {}
 
 
 def days_since(days: dict[str, Any], kind: str, today: dt.date) -> int | None:
@@ -342,6 +391,17 @@ def assess(
     n60, nyear, fed = nitrogen(
         days, today, cool_season=profile.cool_season, northern=lawn.northern_hemisphere
     )
+    # What the last sowing and the last cut were, as they were written down. The sowing says
+    # which job it was and whether the seed had been chitted; the cut says where the lawn is
+    # actually standing, which is not always where the species would have it.
+    sowing = last_details(days, "sowing")
+    mowing = last_details(
+        days,
+        "mowing",
+        having="height_mm",
+        not_before=today - dt.timedelta(days=MOW_HEIGHT_MEMORY_DAYS),
+    )
+
     ahead = {f.date: f for f in forecast}
     next_three = [ahead.get(today + dt.timedelta(days=i)) for i in range(3)]
     rain_24h = _sum(f.rain_mm for f in next_three[:2] if f)
@@ -376,6 +436,9 @@ def assess(
         days_since_aeration=days_since(days, "aeration", today),
         days_since_scarifying=days_since(days, "scarifying", today),
         days_since_sowing=days_since(days, "sowing", today),
+        sowing_kind=sowing.get("kind"),
+        sown_pre_germinated=bool(sowing.get("pre_germinated")),
+        last_mow_height_mm=_int_or_none(mowing.get("height_mm")),
         nitrogen_60d_g_m2=n60,
         nitrogen_year_g_m2=nyear,
         feeds_done_this_year=fed,
@@ -480,6 +543,14 @@ def _sum(values) -> float | None:
 def _best(pick, values):
     present = [v for v in values if v is not None]
     return pick(present) if present else None
+
+
+def _int_or_none(value: Any) -> int | None:
+    """Return a whole number from whatever the diary holds, or None when it holds nothing."""
+    try:
+        return round(float(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def _plan_setup(context: rules.Context) -> str:

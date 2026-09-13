@@ -189,16 +189,19 @@ def test_the_balance_is_run_past_the_forecast_but_not_forever() -> None:
     assert days[-1].date == TODAY + dt.timedelta(days=agenda.BALANCE_DAYS - 1)
 
 
-def test_the_seedbed_watering_is_drawn_but_not_credited_to_the_root_zone() -> None:
+def test_patches_of_seed_are_drawn_but_not_credited_to_the_root_zone() -> None:
     """The chart must agree with the agenda about what goes on the lawn.
 
     Three light waterings a day were in the agenda and missing from the projection, so the
     picture showed a lawn getting nothing on days it was being watered six millimetres. They
-    are shown now. They are still not subtracted from the deficit: two millimetres on a warm
-    afternoon wets the top centimetre and mostly goes back to the air, and crediting it would
-    stop the dawn cycle the established turf around the seed still needs.
+    are shown now. Over a patch of seed in standing turf they are still not subtracted from
+    the deficit: two millimetres on a warm afternoon wets the top centimetre and mostly goes
+    back to the air, and crediting it would stop the dawn cycle the turf around the seed
+    still needs.
     """
-    ctx = _ctx(today=TODAY, days_since_sowing=3, deficit_mm=4.0, etc_today_mm=3.0)
+    ctx = _ctx(
+        today=TODAY, days_since_sowing=3, sowing_kind="repair", deficit_mm=4.0, etc_today_mm=3.0
+    )
     days = agenda.project(ctx, _forecast(), rules.evaluate(ctx), latitude=45.0)
     assert days[0].seedbed_mm == 6.0
     assert days[11].seedbed_mm == 0.0, "the fortnight is over by then"
@@ -207,6 +210,24 @@ def test_the_seedbed_watering_is_drawn_but_not_credited_to_the_root_zone() -> No
         _ctx(today=TODAY, deficit_mm=4.0, etc_today_mm=3.0), _forecast(), [], latitude=45.0
     )
     assert [d.deficit_mm for d in days] == [d.deficit_mm for d in dry]
+
+
+def test_a_lawn_sown_all_over_is_kept_full_by_its_seedbed_passes() -> None:
+    """The passes are the whole of the watering, so the balance has to know about them.
+
+    Left uncredited they would draw a lawn going a fortnight without water while it was
+    being watered every day, and the engine would ask for a dawn cycle on top to fix a
+    deficit that was never there.
+    """
+    ctx = _ctx(
+        today=TODAY, days_since_sowing=3, sowing_kind="overseed", deficit_mm=4.0, etc_today_mm=3.0
+    )
+    days = agenda.project(ctx, _forecast(), rules.evaluate(ctx), latitude=45.0)
+    sown, after = days[:11], days[11:]
+    assert all(d.irrigation_mm > 0 for d in sown), "a seedbed is watered every day"
+    assert max(d.deficit_mm for d in sown) <= ctx.raw_mm, "and never allowed to run down"
+    # Once the seed is up the lawn goes back to deep and infrequent: not every day.
+    assert not all(d.irrigation_mm > 0 for d in after)
 
 
 def test_the_projection_says_where_the_forecast_stopped() -> None:

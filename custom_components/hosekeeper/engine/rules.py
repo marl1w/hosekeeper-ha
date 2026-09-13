@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import datetime as dt
 from typing import Any
 
-from . import disease, nutrition
+from . import disease, nutrition, water
 from .climate import Anomalies, ForecastSkill
 from .knowledge import programme
 from .phenology import Phenology
@@ -105,6 +105,13 @@ class Context:
     feed_factor: float = 1.0
     soil_moisture_pct: float | None = None
 
+    sowing_kind: str | None = None
+    """What the last sowing was recorded as: overseed, new_lawn or repair."""
+    sown_pre_germinated: bool = False
+    """Whether the seed that went down had been chitted before it was sown."""
+    last_mow_height_mm: int | None = None
+    """The height the last recorded cut was actually made at, when it was written down."""
+
     shaded_fraction: float = 0.0
     """Share of the lawn under trees or structures for a good part of the day."""
     tree_fraction: float = 0.0
@@ -135,11 +142,77 @@ class Context:
         has nothing to cut and must not be walked on. A lawn overseeded still has its own
         grass growing over the seed, and that grass has to be cut on time or it shades the
         seedlings out before they ever reach the light.
+
+        Whoever recorded the sowing said which of the two it was, and that answer is better
+        than any arithmetic: the age test can only work on a lawn whose establishment date
+        was filled in, and a blank one used to turn every overseeding into a bare-soil sowing
+        and hold the mower for three weeks over turf that had to keep being cut.
         """
+        if self.sowing_kind in ("overseed", "repair"):
+            return True
+        if self.sowing_kind == "new_lawn":
+            return False
         if self.days_since_sowing is None or self.establishment_age_days is None:
             return False
         age_at_sowing = self.establishment_age_days - self.days_since_sowing
         return age_at_sowing >= programme.SEED_ESTABLISHED_DAYS
+
+    @property
+    def seedbed(self) -> programme.SeedbedRegime:
+        """Return how often the seedbed is to be wetted today."""
+        return programme.seedbed_regime(
+            pre_germinated=self.sown_pre_germinated,
+            days_since_sowing=self.days_since_sowing,
+        )
+
+    @property
+    def seedbed_covers_zone(self) -> bool:
+        """Return whether the seed went down over the whole zone rather than in patches.
+
+        It decides whether the seedbed's passes are the day's watering or an addition to it.
+        Sowing a whole lawn makes it a seedbed and the dawn cycle gives way for the fortnight;
+        sowing a few bare patches into standing turf does not, and the turf around them would
+        be left thirsty if it did. Only a repair says patches, so only a repair is treated as
+        one -- a sowing recorded with nothing said about it is the ordinary case, which is the
+        whole lawn.
+        """
+        return self.sowing_kind != "repair"
+
+    @property
+    def seedbed_target_mm(self) -> float:
+        """Return what the day's passes have to cover between them, in millimetres.
+
+        A seedbed is not run down to the readily available limit and refilled the way turf
+        is: the seed lives in the top centimetre, and the top centimetre is either damp or it
+        is not. So the target is the whole of what the root zone is down by, put back the
+        same day, rather than the deep cycle's threshold-and-refill.
+        """
+        if not (self.germinating and self.seedbed_covers_zone):
+            return 0.0
+        return max(0.0, self.deficit_mm)
+
+    @property
+    def seedbed_depths_mm(self) -> list[float]:
+        """Return how deep each of the day's seedbed passes goes."""
+        return programme.seedbed_depths(
+            self.seedbed,
+            self.seedbed_target_mm,
+            water.max_seedbed_application(self.soil_type),
+        )
+
+    @property
+    def kept_height_mm(self) -> int:
+        """Return the height the lawn is actually standing at, as last cut.
+
+        The advice used to be written against the height the species wants, whatever the
+        lawn had been cut to, which made the interval a fiction on any lawn kept somewhere
+        else: a sward taken to 20 mm needs cutting in a few days and was being told six,
+        because six is what a 50 mm lawn gets. What was recorded wins over what was wanted,
+        and where nothing was recorded the target is the best guess available.
+        """
+        if self.last_mow_height_mm:
+            return self.last_mow_height_mm
+        return mowing_height(self)
 
     def planned(self, category: str | None = None) -> list[Operation]:
         """Return this month's operations, optionally of one category, not yet done."""
@@ -287,10 +360,14 @@ def rule_establishment(ctx: Context) -> list[Advice]:
 def rule_irrigation(ctx: Context) -> list[Advice]:
     """Deep and infrequent, adjusted to the lawn's record and the forecast's honesty.
 
-    Seed sown into an established lawn does not change this: the turf around the seed still
-    has roots at depth and still wants its dawn cycle. Only a lawn that is entirely young
-    hands its watering over to the establishment rule.
+    Seed sown into a few bare patches does not change this: the turf around them still has
+    roots at depth and still wants its dawn cycle. Seed sown over the whole lawn does, and so
+    does a lawn that is entirely young -- both hand the day's watering to the seedbed, which
+    puts the same water on in light passes through the day instead, and being told to do both
+    is being told to water twice.
     """
+    if ctx.germinating and ctx.seedbed_covers_zone:
+        return []  # the seedbed rule owns the day's watering
     if ctx.new_lawn and (
         ctx.establishment_age_days <= programme.SOD_ROOTING_DAYS
         if ctx.establishment_method == "sod"
@@ -438,8 +515,18 @@ def rule_mowing(ctx: Context) -> list[Advice]:
         return []
     # The height first, because the interval follows from it: the third rule lets the grass
     # reach half again the height it is kept at, so a lawn cut low comes round sooner.
-    height = mowing_height(ctx)
-    interval = programme.mow_interval_days(ctx.phase, height)
+    #
+    # Two heights, though, because they are not always the same one. The target is what the
+    # species and the mower between them allow; the kept height is where the lawn is actually
+    # standing, and after a scalp taken to open the sward before seed those are 40 mm apart.
+    # The lawn is then climbing back rather than being cut to a height, so the next cut is
+    # set half again above where it stands, and the wait is how long the season takes to grow
+    # the leaf into it -- not the interval a lawn already at its target would be on.
+    target = mowing_height(ctx)
+    kept = ctx.kept_height_mm
+    climbing = kept < ctx.mow_height_mm[0]
+    height = programme.recovery_height(kept, target) if climbing else target
+    interval = programme.days_to_grow(ctx.phase, kept, 1.5 * height)
     if interval is None:
         return [Advice("no_mowing_dormant", "mowing", 4, {}, ("dormant",))]
     since = ctx.days_since_mowing
@@ -478,8 +565,10 @@ def rule_mowing(ctx: Context) -> list[Advice]:
             )
         ]
     # Under stress the cut is made at the top of what the mower can reach: the longer leaf
-    # shades its own soil, which is the whole reason the height goes up in the heat.
-    if stressed:
+    # shades its own soil, which is the whole reason the height goes up in the heat. A lawn
+    # still climbing back from a scalp cannot be sent there in one step, and is already going
+    # the right way.
+    if stressed and not climbing:
         height = ctx.mow_height_mm[1]
     if since is None:
         return [
@@ -509,6 +598,23 @@ def rule_mowing(ctx: Context) -> list[Advice]:
                 3,
                 {"days": since, "height_mm": height},
                 ("interval_reached", *((stress,) if stressed else ())),
+            )
+        ]
+    if climbing:
+        # Nothing to do today, and the reason it is not the usual line is worth saying: the
+        # lawn is below the range on purpose and is being walked back up, not left there.
+        return [
+            Advice(
+                "raise_height_after_low_cut",
+                "mowing",
+                3,
+                {
+                    "height_mm": height,
+                    "kept_mm": kept,
+                    "target_mm": target,
+                    "next_in_days": interval - since,
+                },
+                ("cut_below_species_range", "climbing_back_in_steps"),
             )
         ]
     return [
@@ -832,15 +938,25 @@ def rule_germination(ctx: Context) -> list[Advice]:
         # button that does nothing as far as anybody can see. The day's passes are one job.
         return []
     left = programme.SEED_GERMINATION_DAYS - (ctx.days_since_sowing or 0)
-    return [
-        Advice(
-            "germination_watering",
-            "irrigation",
-            1,
-            {"times": 3, "mm": 2, "days_left": max(1, left)},
-            ("seed_germinating", "keep_the_seedbed_damp"),
-        )
-    ]
+    regime = ctx.seedbed
+    depths = ctx.seedbed_depths_mm
+    whole = ctx.seedbed_covers_zone
+    params: dict[str, Any] = {
+        "times": regime.passes,
+        "mm": depths[0] if depths else regime.mm,
+        "daily_mm": round(sum(depths), 1),
+        "days_left": max(1, left),
+    }
+    if ctx.minutes_per_mm and depths:
+        params["minutes"] = max(1, round(depths[0] * ctx.minutes_per_mm))
+    reasons = ["seed_germinating", "keep_the_seedbed_damp"]
+    if regime is programme.CHITTED_SEEDBED:
+        reasons.append("chitted_seed_cannot_dry")
+    if whole:
+        # The day's watering, not an addition to it, and the advice has to say so or it reads
+        # as one more thing to do on top of a dawn cycle that is no longer running.
+        reasons.append("seedbed_day_replaces_dawn_cycle")
+    return [Advice("germination_watering", "irrigation", 1, params, tuple(reasons))]
 
 
 # ------------------------------------------------------------------------- leaves
@@ -908,6 +1024,7 @@ ADVICE_CODES: tuple[str, ...] = (
     "mow_soon",
     "mow_now_third_rule",
     "mowing_height",
+    "raise_height_after_low_cut",
     "hold_mowing_after_sowing",
     "mow_by_hand_while_seed_roots",
     "feed_recently_done",

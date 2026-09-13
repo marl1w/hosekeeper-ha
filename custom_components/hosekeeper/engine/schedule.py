@@ -15,6 +15,7 @@ import math
 from typing import Any
 
 from . import water
+from .knowledge import programme
 
 DAWN_BUFFER = dt.timedelta(minutes=10)
 SYRINGE_TIME = dt.time(13, 0)
@@ -38,11 +39,14 @@ MAX_CYCLES = 4
 #
 # Seed needs the top centimetre damp for a fortnight, which no deep cycle can do: it wets
 # the root zone and the surface is dry by noon. So a sown lawn gets short waterings through
-# the day on top of whatever the established turf around it is given. The last one is early
-# enough that the leaf dries before dark, because a seedbed wet all night grows damping-off
-# rather than grass.
-GERMINATION_TIMES = (dt.time(11, 0), dt.time(14, 0), dt.time(17, 0))
-GERMINATION_MM = 2.0
+# the day on top of whatever the established turf around it is given. How many and how deep
+# is the seedbed's business and lives in the knowledge layer, because the rules quote the
+# same figures back to the user; what is settled here is where they land in the day. The
+# last one is early enough that the leaf dries before dark, whichever regime is running,
+# because a seedbed wet all night grows damping-off rather than grass.
+STANDARD_SEEDBED = programme.STANDARD_SEEDBED
+GERMINATION_TIMES = STANDARD_SEEDBED.times
+GERMINATION_MM = STANDARD_SEEDBED.mm
 
 # When a watering already decided is worth deciding again.
 #
@@ -147,6 +151,27 @@ class IrrigationPlan:
     syringe_end: dt.datetime | None = None
     reasons: tuple[str, ...] = ()
 
+    @property
+    def seedbed_day(self) -> bool:
+        """Return whether the seedbed's passes are the whole of this day's watering.
+
+        A lawn sown all over has no dawn cycle for the fortnight, and its passes are real
+        water on a real root zone rather than damp kept on a surface. Everything downstream
+        -- what the balance is credited with, what the chart hatches -- turns on this, so it
+        is read back off the plan rather than worked out again from the lawn.
+        """
+        return "seedbed_day_replaces_dawn_cycle" in self.reasons
+
+    @property
+    def seedbed_mm(self) -> float:
+        """Return the depth the day's seedbed passes put on the lawn between them."""
+        return round(sum(cycle.mm for cycle in self.germination), 1)
+
+    @property
+    def planned_mm(self) -> float:
+        """Return what this plan puts on the lawn, whichever regime the day is on."""
+        return self.seedbed_mm if self.seedbed_day else self.main_mm
+
     # The whole watering, as one span: what a sensor, a calendar entry and a row all want.
     @property
     def main_mm(self) -> float:
@@ -233,28 +258,54 @@ def irrigation_plan(
     soil_type: str = "loam",
     germinating: bool = False,
     germination_offset: dt.timedelta = dt.timedelta(),
+    seedbed: programme.SeedbedRegime = STANDARD_SEEDBED,
+    seedbed_whole_zone: bool = False,
+    seedbed_target_mm: float = 0.0,
 ) -> IrrigationPlan:
-    """Return the plan for the dawn that ends at `sunrise`.
+    """Return the plan for the dawn that ends at `sunrise`, or the day a seedbed asks for.
 
-    One watering, deep enough to refill the root zone, finishing as the sun comes up. It is
-    laid out backwards from there: the last cycle ends ten minutes before sunrise, and any
-    earlier cycles are stacked behind it with a soak between, so the soil has time to take
-    the water in. Nothing starts before one in the morning; a refill too big to fit says so
-    and the rest waits for the next day.
+    Ordinarily: one watering, deep enough to refill the root zone, finishing as the sun comes
+    up. It is laid out backwards from there -- the last cycle ends ten minutes before
+    sunrise, and any earlier cycles are stacked behind it with a soak between, so the soil
+    has time to take the water in. Nothing starts before one in the morning; a refill too big
+    to fit says so and the rest waits for the next day.
+
+    A lawn sown all over is the exception, and it is not the ordinary day with extra
+    waterings bolted onto it. Water put down at dawn is in the root zone by breakfast and the
+    top centimetre is dry by eleven, which is the one centimetre the seed is living in; and
+    seed sitting on the surface is what a deep run moves. So for the fortnight the seed is
+    coming up the dawn cycle gives way: the day's whole watering is the seedbed's passes,
+    spread from morning to late afternoon, each one deep enough to count and light enough to
+    leave the seed where it was sown. The deep cycle comes back when the seed is up, and with
+    it the deep roots it is there to grow.
     """
     reasons: list[str] = []
-    cycles, left_over = lay_out_cycles(needed_mm, minutes_per_mm, soil_type, sunrise - DAWN_BUFFER)
+    seedbed_day = germinating and seedbed_whole_zone
+    if seedbed_day:
+        cycles: tuple[Cycle, ...] = ()
+        left_over = False
+        reasons.append("seedbed_day_replaces_dawn_cycle")
+        if not minutes_per_mm:
+            reasons.append("rate_unknown_no_timing")
+    else:
+        cycles, left_over = lay_out_cycles(
+            needed_mm, minutes_per_mm, soil_type, sunrise - DAWN_BUFFER
+        )
     if left_over:
         reasons.append("run_capped_split_tomorrow")
     if len(cycles) > 1:
         reasons.append("cycle_and_soak")
     if cycles:
         reasons.append("finish_by_sunrise_leaves_dry")
-    elif needed_mm > 0:
+    elif needed_mm > 0 and not seedbed_day:
         reasons.append("rate_unknown_no_timing")
 
-    syringe = not dormant and (
-        heat_stress or (forecast_tmax is not None and forecast_tmax >= SYRINGE_TMAX_C)
+    # No syringing on a seedbed day: the passes already cross the hottest part of it, and a
+    # second regime on the same valve would only be the same water twice.
+    syringe = (
+        not dormant
+        and not seedbed_day
+        and (heat_stress or (forecast_tmax is not None and forecast_tmax >= SYRINGE_TMAX_C))
     )
     syringe_start = syringe_end = None
     if syringe:
@@ -264,12 +315,23 @@ def irrigation_plan(
         reasons.append("midday_syringing_heat")
 
     germination = (
-        germination_cycles(date, sunrise.tzinfo, minutes_per_mm, germination_offset)
+        germination_cycles(
+            date,
+            sunrise.tzinfo,
+            minutes_per_mm,
+            germination_offset,
+            seedbed,
+            # On a lawn sown all over these passes are the day's watering and carry what the
+            # root zone is down by; over a patch of new seed in an established lawn they are
+            # surface water and the dawn cycle above is still doing that work.
+            seedbed_target_mm if seedbed_day else 0.0,
+            soil_type,
+        )
         if germinating
         else ()
     )
     if germination:
-        reasons.append("keep_the_seedbed_damp")
+        reasons.extend(seedbed_reasons(seedbed))
 
     return IrrigationPlan(
         date=date,
@@ -316,21 +378,63 @@ def with_germination(
     tzinfo: dt.tzinfo,
     minutes_per_mm: float | None,
     offset: dt.timedelta = dt.timedelta(),
+    regime: programme.SeedbedRegime = STANDARD_SEEDBED,
+    *,
+    whole_zone: bool = False,
+    target_mm: float = 0.0,
+    soil_type: str = "loam",
 ) -> IrrigationPlan:
-    """Return the plan with the seedbed's passes added, keeping everything else as decided.
+    """Return the plan the lawn needs now that seed has gone down on it.
 
-    Seed goes down on a day whose watering was decided that morning, and the passes that keep
-    a seedbed damp are not part of what was decided: they are two millimetres on the surface
-    three times over, they never enter the balance, and without them the day the seed went
-    down is the one day it is left to dry out. So, like a syringing, they can join a plan
-    that has already been settled.
+    Seed goes down on a day whose watering was decided that morning, and the seedbed's passes
+    are not part of what was decided; without them the day the seed went down is the one day
+    it is left to dry out. So, like a syringing, they can join a plan already settled.
+
+    A sowing over the whole zone does more than add to the plan, though. The lawn the plan
+    was made for was turf; it is now a seedbed, and the deep cycle that was right at eight
+    this morning would wash the seed about at four tomorrow. Settling the plan protects it
+    from the weather changing its mind, not from the lawn itself changing -- so a whole-zone
+    sowing takes the dawn cycle back out and the day becomes the seedbed's.
     """
     if plan.germination:
         return plan
-    cycles = germination_cycles(plan.date, tzinfo, minutes_per_mm, offset)
+    cycles = germination_cycles(
+        plan.date,
+        tzinfo,
+        minutes_per_mm,
+        offset,
+        regime,
+        target_mm if whole_zone else 0.0,
+        soil_type,
+    )
     if not cycles:
         return plan
-    return replace(plan, germination=cycles, reasons=(*plan.reasons, "keep_the_seedbed_damp"))
+    reasons = (*plan.reasons, *seedbed_reasons(regime))
+    if not whole_zone:
+        return replace(plan, germination=cycles, reasons=reasons)
+    return replace(
+        plan,
+        cycles=(),
+        germination=cycles,
+        syringe=False,
+        syringe_start=None,
+        syringe_end=None,
+        reasons=(
+            *(r for r in reasons if r not in DAWN_ONLY_REASONS),
+            "seedbed_day_replaces_dawn_cycle",
+        ),
+    )
+
+
+# Reasons that belong to a dawn cycle and mean nothing once there is not one.
+DAWN_ONLY_REASONS = frozenset(
+    {
+        "cycle_and_soak",
+        "finish_by_sunrise_leaves_dry",
+        "run_capped_split_tomorrow",
+        "midday_syringing_heat",
+    }
+)
 
 
 def with_syringe(
@@ -357,23 +461,42 @@ def with_syringe(
     )
 
 
+def seedbed_reasons(regime: programme.SeedbedRegime) -> tuple[str, ...]:
+    """Return why the day carries seedbed passes, and why this many of them."""
+    if regime is programme.CHITTED_SEEDBED:
+        return ("keep_the_seedbed_damp", "chitted_seed_cannot_dry")
+    return ("keep_the_seedbed_damp",)
+
+
 def germination_cycles(
     date: dt.date,
     tzinfo: dt.tzinfo,
     minutes_per_mm: float | None,
     offset: dt.timedelta = dt.timedelta(),
+    regime: programme.SeedbedRegime = STANDARD_SEEDBED,
+    target_mm: float = 0.0,
+    soil_type: str = "loam",
 ) -> tuple[Cycle, ...]:
-    """Return the short waterings a sown lawn needs through the day.
+    """Return the day's waterings over a sown lawn, and how deep each one goes.
 
     `offset` moves this lawn's passes past the lawns already booked into the same slot. A
-    controller opens one valve at a time, so three lawns all starting at eleven means the
+    controller opens one valve at a time, so three lawns all starting at nine means the
     second and third get whatever pressure is left, or nothing at all.
+
+    `regime` is how often the seedbed is wetted: the ordinary three passes, or the five
+    lighter ones chitted seed needs while its radicle has no root to fall back on.
+
+    `target_mm` is what the root zone under the seed is down by. On a lawn sown all over,
+    these passes are the whole of the day's watering and have to cover it between them; on
+    a lawn where only a patch was sown they are surface water and the target is left at
+    zero, because the dawn cycle is still there doing the root zone's work.
     """
-    minutes = max(1, round(GERMINATION_MM * minutes_per_mm)) if minutes_per_mm else 3
+    depths = programme.seedbed_depths(regime, target_mm, water.max_seedbed_application(soil_type))
     out = []
-    for at in GERMINATION_TIMES:
+    for at, mm in zip(regime.times, depths, strict=True):
         start = dt.datetime.combine(date, at, tzinfo=tzinfo) + offset
-        out.append(Cycle(start, start + dt.timedelta(minutes=minutes), GERMINATION_MM))
+        minutes = max(1, round(mm * minutes_per_mm)) if minutes_per_mm else 3
+        out.append(Cycle(start, start + dt.timedelta(minutes=minutes), mm))
     return tuple(out)
 
 

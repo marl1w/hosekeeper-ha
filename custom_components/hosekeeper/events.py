@@ -316,6 +316,10 @@ def build(
             # three times, and the hours are what the reader needs. The runs themselves are
             # in the irrigation plan, which is what a valve is driven from.
             day = dt.date.fromisoformat(date)
+            # The regime's own hours, carried by the agenda so the calendar and the plan
+            # agree on how many passes a day has. Taken out either way: what the reader wants
+            # is the clock below, which is these with this zone's turn at the valve in them.
+            hours = [dt.time.fromisoformat(at) for at in params.pop("hours", None) or []]
             decided = plan.get("germination") if plan.get("date") == date else None
             if decided:
                 clock = [cycle["start"][11:16] for cycle in decided]
@@ -333,7 +337,7 @@ def build(
                 queued = dt.timedelta(minutes=int(getattr(state, "seedbed_queue_min", 0) or 0))
                 times = [
                     (dt.datetime.combine(day, at, tzinfo=tz) + queued)
-                    for at in schedule.GERMINATION_TIMES
+                    for at in hours or schedule.GERMINATION_TIMES
                 ]
                 clock = [at.strftime("%H:%M") for at in times]
                 start = times[0].isoformat()

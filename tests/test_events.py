@@ -57,7 +57,7 @@ def test_seedbed_watering_is_one_entry_carrying_its_hours() -> None:
         if e["code"] == "germination_watering"
     ]
     assert len(found) == 1
-    assert found[0]["params"]["at"] == ["11:00", "14:00", "17:00"]
+    assert found[0]["params"]["at"] == ["09:00", "13:00", "17:00"]
     assert not found[0]["all_day"]
 
 
@@ -113,6 +113,6 @@ def test_a_zone_behind_another_waters_its_seedbed_later() -> None:
     )
     first = next(e for e in ahead if e["code"] == "germination_watering")
     second = next(e for e in behind if e["code"] == "germination_watering")
-    assert first["params"]["at"] == ["11:00", "14:00", "17:00"]
-    assert second["params"]["at"] == ["11:07", "14:07", "17:07"]
+    assert first["params"]["at"] == ["09:00", "13:00", "17:00"]
+    assert second["params"]["at"] == ["09:07", "13:07", "17:07"]
     assert second["start"] > first["start"]
