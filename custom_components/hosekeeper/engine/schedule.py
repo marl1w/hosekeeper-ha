@@ -9,6 +9,7 @@ adding much water. Mowing waits for the dew to lift and for the grass to be dry.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 import datetime as dt
 import math
@@ -260,7 +261,7 @@ def irrigation_plan(
     germination_offset: dt.timedelta = dt.timedelta(),
     seedbed: programme.SeedbedRegime = STANDARD_SEEDBED,
     seedbed_whole_zone: bool = False,
-    seedbed_target_mm: float = 0.0,
+    seedbed_depths: Sequence[float] = (),
 ) -> IrrigationPlan:
     """Return the plan for the dawn that ends at `sunrise`, or the day a seedbed asks for.
 
@@ -316,16 +317,7 @@ def irrigation_plan(
 
     germination = (
         germination_cycles(
-            date,
-            sunrise.tzinfo,
-            minutes_per_mm,
-            germination_offset,
-            seedbed,
-            # On a lawn sown all over these passes are the day's watering and carry what the
-            # root zone is down by; over a patch of new seed in an established lawn they are
-            # surface water and the dawn cycle above is still doing that work.
-            seedbed_target_mm if seedbed_day else 0.0,
-            soil_type,
+            date, sunrise.tzinfo, minutes_per_mm, germination_offset, seedbed, seedbed_depths
         )
         if germinating
         else ()
@@ -379,10 +371,9 @@ def with_germination(
     minutes_per_mm: float | None,
     offset: dt.timedelta = dt.timedelta(),
     regime: programme.SeedbedRegime = STANDARD_SEEDBED,
+    depths: Sequence[float] = (),
     *,
     whole_zone: bool = False,
-    target_mm: float = 0.0,
-    soil_type: str = "loam",
 ) -> IrrigationPlan:
     """Return the plan the lawn needs now that seed has gone down on it.
 
@@ -398,15 +389,7 @@ def with_germination(
     """
     if plan.germination:
         return plan
-    cycles = germination_cycles(
-        plan.date,
-        tzinfo,
-        minutes_per_mm,
-        offset,
-        regime,
-        target_mm if whole_zone else 0.0,
-        soil_type,
-    )
+    cycles = germination_cycles(plan.date, tzinfo, minutes_per_mm, offset, regime, depths)
     if not cycles:
         return plan
     reasons = (*plan.reasons, *seedbed_reasons(regime))
@@ -474,8 +457,7 @@ def germination_cycles(
     minutes_per_mm: float | None,
     offset: dt.timedelta = dt.timedelta(),
     regime: programme.SeedbedRegime = STANDARD_SEEDBED,
-    target_mm: float = 0.0,
-    soil_type: str = "loam",
+    depths: Sequence[float] = (),
 ) -> tuple[Cycle, ...]:
     """Return the day's waterings over a sown lawn, and how deep each one goes.
 
@@ -484,16 +466,16 @@ def germination_cycles(
     second and third get whatever pressure is left, or nothing at all.
 
     `regime` is how often the seedbed is wetted: the ordinary three passes, or the five
-    lighter ones chitted seed needs while its radicle has no root to fall back on.
-
-    `target_mm` is what the root zone under the seed is down by. On a lawn sown all over,
-    these passes are the whole of the day's watering and have to cover it between them; on
-    a lawn where only a patch was sown they are surface water and the target is left at
-    zero, because the dawn cycle is still there doing the root zone's work.
+    lighter ones chitted seed needs while its radicle has no root to fall back on. `depths`
+    is what the day actually owes, worked out where the rain and the balance are known, and
+    it may be shorter than the regime -- rain takes passes off the day. The ones that stay
+    are the regime's later hours, because the surface is wettest in the morning, from dew
+    and from whatever fell overnight, and driest by the end of the afternoon.
     """
-    depths = programme.seedbed_depths(regime, target_mm, water.max_seedbed_application(soil_type))
+    if not depths:
+        return ()
     out = []
-    for at, mm in zip(regime.times, depths, strict=True):
+    for at, mm in zip(regime.times[-len(depths) :], depths, strict=True):
         start = dt.datetime.combine(date, at, tzinfo=tzinfo) + offset
         minutes = max(1, round(mm * minutes_per_mm)) if minutes_per_mm else 3
         out.append(Cycle(start, start + dt.timedelta(minutes=minutes), mm))

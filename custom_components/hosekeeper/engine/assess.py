@@ -113,8 +113,13 @@ class Assessment:
 
     @property
     def seedbed_target_mm(self) -> float:
-        """Return what the day's seedbed passes have to cover between them."""
+        """Return what the day's seedbed passes have to put on the lawn, rain counted."""
         return self.context.seedbed_target_mm
+
+    @property
+    def seedbed_depths_mm(self) -> list[float]:
+        """Return how deep each of the day's seedbed passes goes, or none if rain does it."""
+        return self.context.seedbed_depths_mm
 
 
 def recent(
@@ -405,6 +410,10 @@ def assess(
     ahead = {f.date: f for f in forecast}
     next_three = [ahead.get(today + dt.timedelta(days=i)) for i in range(3)]
     rain_24h = _sum(f.rain_mm for f in next_three[:2] if f)
+    # Tomorrow on its own, for the jobs that happen in tomorrow's daylight rather than
+    # before its dawn: the seedbed's passes, which must not be cancelled by rain forecast
+    # for this afternoon -- that rain is in the balance by the time they run.
+    rain_tomorrow = next_three[1].rain_mm if next_three[1] else None
     rain_72h = _sum(f.rain_mm for f in next_three if f)
 
     context = rules.Context(
@@ -426,6 +435,7 @@ def assess(
         can_convert_minutes=bool(lawn.application_rate_mm_h),
         minutes_per_mm=lawn.minutes_per_mm,
         forecast_rain_24h_mm=rain_24h,
+        forecast_rain_tomorrow_mm=rain_tomorrow,
         forecast_rain_72h_mm=rain_72h,
         forecast_tmax_3d=_best(max, (f.tmax for f in next_three if f)),
         forecast_tmin_3d=_best(min, (f.tmin for f in next_three if f)),

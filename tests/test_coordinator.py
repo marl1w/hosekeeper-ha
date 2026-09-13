@@ -70,6 +70,19 @@ def forecast_days() -> list[dict[str, Any]]:
 
 
 @pytest.fixture
+def dry_forecast(forecast_days: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return the week's forecast with the rain taken out of it.
+
+    The default forecast carries six millimetres tomorrow, which is enough to take a
+    seedbed's morning passes off the day. That is the right answer and beside the point in a
+    test about valve queues, plan shapes or which regime a sowing put the lawn on.
+    """
+    for day in forecast_days:
+        day["precipitation"] = 0.0
+    return forecast_days
+
+
+@pytest.fixture
 def weather_service(hass: HomeAssistant, forecast_days: list[dict[str, Any]]) -> None:
     async def handle(call: ServiceCall) -> dict[str, Any]:
         return {"weather.forecast_home": {"forecast": forecast_days}}
@@ -545,7 +558,7 @@ async def test_two_zones_on_one_lawn_chain_their_dawn_cycles(
             assert a_end <= b_start or b_end <= a_start, "two lawns share the valve"
 
 
-@pytest.mark.usefixtures("weather_service", "station")
+@pytest.mark.usefixtures("weather_service", "station", "dry_forecast")
 async def test_seed_sown_today_is_watered_today(
     hass: HomeAssistant, field_data: dict[str, Any]
 ) -> None:
@@ -595,7 +608,7 @@ async def test_rain_after_the_plan_was_made_takes_the_watering_back(
     assert "revised_rain_since" in revised["reasons"]
 
 
-@pytest.mark.usefixtures("weather_service", "station")
+@pytest.mark.usefixtures("weather_service", "station", "dry_forecast")
 async def test_a_lawn_watered_by_hand_is_given_no_queue(
     hass: HomeAssistant, field_data: dict[str, Any]
 ) -> None:
@@ -629,7 +642,7 @@ async def test_a_lawn_watered_by_hand_is_given_no_queue(
     assert all(each.coordinator.data.seedbed_queue_min == 0 for each in zones)
 
 
-@pytest.mark.usefixtures("weather_service", "station")
+@pytest.mark.usefixtures("weather_service", "station", "dry_forecast")
 async def test_two_zones_do_not_water_their_seedbeds_at_the_same_minute(
     hass: HomeAssistant, field_data: dict[str, Any]
 ) -> None:
@@ -701,7 +714,7 @@ async def test_the_station_outranks_the_forecast_once_the_day_is_over(
     assert evening.attributes["tmax"] == 36.0
 
 
-@pytest.mark.usefixtures("weather_service", "station")
+@pytest.mark.usefixtures("weather_service", "station", "dry_forecast")
 async def test_a_seedbed_pass_over_patches_is_not_credited_to_the_balance(
     hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
 ) -> None:
@@ -744,7 +757,7 @@ async def test_a_seedbed_pass_over_patches_is_not_credited_to_the_balance(
     assert not page.get("irrigation_mm"), "a seedbed pass was credited to the root zone"
 
 
-@pytest.mark.usefixtures("weather_service", "station")
+@pytest.mark.usefixtures("weather_service", "station", "dry_forecast")
 async def test_a_lawn_sown_all_over_is_watered_by_its_passes_and_not_at_dawn(
     hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
 ) -> None:
@@ -883,7 +896,7 @@ async def test_heat_reaches_a_plan_that_was_already_decided(
     assert "midday_syringing_heat" in plan["reasons"]
 
 
-@pytest.mark.usefixtures("weather_service", "station")
+@pytest.mark.usefixtures("weather_service", "station", "dry_forecast")
 async def test_pre_germinated_seed_gets_the_tighter_schedule_through_the_service(
     hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
 ) -> None:
@@ -919,7 +932,7 @@ async def test_pre_germinated_seed_gets_the_tighter_schedule_through_the_service
     )
 
 
-@pytest.mark.usefixtures("weather_service", "station")
+@pytest.mark.usefixtures("weather_service", "station", "dry_forecast")
 async def test_a_plan_made_before_the_sowing_is_reshaped_not_kept(
     hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
 ) -> None:

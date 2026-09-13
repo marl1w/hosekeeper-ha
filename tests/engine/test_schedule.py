@@ -184,6 +184,7 @@ def test_a_sown_lawn_keeps_its_dawn_cycle_and_gets_the_seedbed_damp() -> None:
         dormant=False,
         soil_type="loam",
         germinating=True,
+        seedbed_depths=[programme.STANDARD_SEEDBED.mm] * programme.STANDARD_SEEDBED.passes,
     )
     assert len(plan.cycles) == 1, "the established turf still gets its deep watering"
     assert [c.start.time() for c in plan.germination] == list(schedule.GERMINATION_TIMES)
@@ -202,9 +203,10 @@ def test_seedbed_passes_can_be_queued_behind_another_lawn() -> None:
     """
     day = dt.date(2026, 9, 6)
     tz = dt.timezone(dt.timedelta(hours=2))
-    first = schedule.germination_cycles(day, tz, minutes_per_mm=3.0)
+    depths = [programme.STANDARD_SEEDBED.mm] * programme.STANDARD_SEEDBED.passes
+    first = schedule.germination_cycles(day, tz, 3.0, depths=depths)
     second = schedule.germination_cycles(
-        day, tz, minutes_per_mm=3.0, offset=dt.timedelta(minutes=6)
+        day, tz, 3.0, offset=dt.timedelta(minutes=6), depths=depths
     )
     assert [c.start.strftime("%H:%M") for c in first] == ["09:00", "13:00", "17:00"]
     assert [c.start.strftime("%H:%M") for c in second] == ["09:06", "13:06", "17:06"]
@@ -247,6 +249,7 @@ def test_a_chitted_seedbed_gets_more_passes_and_lighter_ones() -> None:
         soil_type="loam",
         germinating=True,
         seedbed=programme.CHITTED_SEEDBED,
+        seedbed_depths=[programme.CHITTED_SEEDBED.mm] * programme.CHITTED_SEEDBED.passes,
     )
     assert [c.start.time() for c in plan.germination] == list(programme.CHITTED_SEEDBED.times)
     assert all(c.mm == programme.CHITTED_SEEDBED.mm for c in plan.germination)
@@ -272,7 +275,14 @@ def test_the_seedbed_a_settled_plan_gains_is_the_regime_the_day_is_on() -> None:
         soil_type="loam",
     )
     assert not settled.germination
-    sown = schedule.with_germination(settled, TZ, 4.0, dt.timedelta(), programme.CHITTED_SEEDBED)
+    sown = schedule.with_germination(
+        settled,
+        TZ,
+        4.0,
+        dt.timedelta(),
+        programme.CHITTED_SEEDBED,
+        [programme.CHITTED_SEEDBED.mm] * programme.CHITTED_SEEDBED.passes,
+    )
     assert len(sown.germination) == programme.CHITTED_SEEDBED.passes
     assert "chitted_seed_cannot_dry" in sown.reasons
     # And the watering that was decided this morning is still exactly the one decided.

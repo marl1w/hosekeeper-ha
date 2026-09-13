@@ -31,6 +31,10 @@ can be picked up without re-reading the whole history.
   passes for its first five days. Only a spot repair keeps both regimes at once — dawn cycle
   for the turf, uncredited surface passes over the patches. A lawn sown from bare soil gets
   the establishment rule's light regime alone.
+- **Rain is counted against the seedbed before the passes are.** Tomorrow's forecast alone,
+  weighted by the forecast's record and without the 2 mm root-zone threshold, comes off what
+  the day owes. A shower takes the morning's passes and leaves the late one; past 15 mm the
+  day is called off and the advice says so.
 - **Syringing is suggested**, and only for what it is: 1.5 mm at one in the afternoon on a
   day of heat stress or a forecast above 32 °C, to cool the canopy. It is not counted as
   irrigation in the balance.

@@ -333,7 +333,7 @@ def invent(
         germination_offset=dt.timedelta(minutes=int((chain or {}).get("germination_minutes", 0))),
         seedbed=result.seedbed,
         seedbed_whole_zone=result.seedbed_covers_zone,
-        seedbed_target_mm=result.seedbed_target_mm,
+        seedbed_depths=result.seedbed_depths_mm,
     )
     # One valve at a time, as on the box: each lawn's dawn cycle ends where the next lawn's
     # begins, and its seedbed passes start where the queue ahead of it finishes. Without this

@@ -197,6 +197,26 @@ in a humid temperate climate first, and generalised by hemisphere and grass clas
   soil would take in one go — so the seed stays where it was sown. Being the day's watering,
   they are credited to the balance like any other water. The deep cycle comes back when the
   seed is up, and with it the deep roots it is there to grow.
+- **Rain does the seedbed's job, and is counted before the passes are.** What the day owes
+  is the damp floor, or what the root zone is down by, whichever is greater; the rain
+  forecast for that day comes off it, and what is left is divided into passes. A day that
+  owes less than one pass gets none, and says so — a seedbed line that quietly disappears on
+  a wet day reads as the engine having forgotten the seed. Three details matter. The forecast
+  used is **tomorrow's alone**, not the 24-hour figure, because that one is today and
+  tomorrow together: right for a cycle that runs before tomorrow's dawn, wrong for passes
+  that run in tomorrow's daylight, and counting this afternoon's rain twice is how a seedbed
+  is left dry. It is weighted by the forecast's local record, the same trust the dawn cycle
+  puts in it. And it carries **no 2 mm threshold**: `effective_rain` puts one under rain
+  credited to the root zone because a millimetre and a half never reaches a root, but it wets
+  the top centimetre as well as one of these passes does, which is all a seedbed asks.
+- **The last pass survives a shower; only a soaking takes the whole day.** A forecast gives a
+  daily total and says nothing about the hour it falls at — 6 mm at three in the morning
+  leaves a seedbed dry by five in the afternoon. The loss is not symmetrical: too much water
+  costs water, too little costs the sowing. So rain takes the morning's passes off the day,
+  and the late one is kept until the rain passes 15 mm, which is heavy enough that the
+  surface cannot plausibly have dried before dark. The passes kept are always the regime's
+  later hours, because the surface is wettest in the morning, from dew and from whatever fell
+  overnight, and driest by the end of the afternoon.
 - **Sowing a few bare patches does not.** The turf around them still has roots at depth and
   still wants its cycle, so a repair keeps both regimes: the dawn cycle as usual, and light
   2 mm passes over the patches that are surface water and stay out of the balance. Which of

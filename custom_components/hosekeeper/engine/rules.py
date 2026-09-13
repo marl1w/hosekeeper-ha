@@ -105,6 +105,15 @@ class Context:
     feed_factor: float = 1.0
     soil_moisture_pct: float | None = None
 
+    forecast_rain_tomorrow_mm: float | None = None
+    """Rain forecast for tomorrow alone.
+
+    The 24-hour figure is today and tomorrow together, which is the right window for a cycle
+    that runs before tomorrow's dawn. A seedbed's passes run through tomorrow's daylight, and
+    rain forecast for this afternoon has nothing to do with them -- it will already be in the
+    balance by the time they run, and counting it twice is how a seedbed is left dry.
+    """
+
     sowing_kind: str | None = None
     """What the last sowing was recorded as: overseed, new_lawn or repair."""
     sown_pre_germinated: bool = False
@@ -179,26 +188,62 @@ class Context:
         return self.sowing_kind != "repair"
 
     @property
-    def seedbed_target_mm(self) -> float:
-        """Return what the day's passes have to cover between them, in millimetres.
+    def seedbed_owed_mm(self) -> float:
+        """Return what the day has to put on a seedbed before rain is counted.
 
-        A seedbed is not run down to the readily available limit and refilled the way turf
-        is: the seed lives in the top centimetre, and the top centimetre is either damp or it
-        is not. So the target is the whole of what the root zone is down by, put back the
-        same day, rather than the deep cycle's threshold-and-refill.
+        Two jobs at once. The surface has to stay damp, which is a floor under the day
+        whatever the balance says -- the seed lives in the top centimetre, and the top
+        centimetre is either damp or it is not. And on a lawn sown all over there is no dawn
+        cycle, so the root zone underneath has to be replaced by these passes too: the whole
+        of what it is down by, put back the same day, rather than the deep cycle's
+        threshold-and-refill. Over a patch of seed the dawn cycle is still doing that second
+        job, so the floor is the whole of it.
         """
-        if not (self.germinating and self.seedbed_covers_zone):
+        if not self.germinating:
             return 0.0
-        return max(0.0, self.deficit_mm)
+        floor = self.seedbed.daily_mm
+        if not self.seedbed_covers_zone:
+            return floor
+        return max(floor, max(0.0, self.deficit_mm))
+
+    @property
+    def seedbed_rain_mm(self) -> float:
+        """Return the rain the seedbed can count on for the day its passes cover.
+
+        Tomorrow's forecast, weighted by how honest the forecast has been here, which is the
+        same trust the dawn cycle puts in it. Rain already fallen is not added: it is in the
+        balance already, and the deficit this is set against has had it taken out.
+
+        No two-millimetre threshold, either. `effective_rain` puts one under rain credited to
+        the root zone because a millimetre and a half never reaches a root -- but it wets the
+        top centimetre as well as one of these passes does, which is the only thing a seedbed
+        is asking of it.
+        """
+        if not self.germinating:
+            return 0.0
+        return self.expected_rain_tomorrow
+
+    @property
+    def seedbed_target_mm(self) -> float:
+        """Return what the day's passes have to put on the lawn, rain counted."""
+        return max(0.0, self.seedbed_owed_mm - self.seedbed_rain_mm)
 
     @property
     def seedbed_depths_mm(self) -> list[float]:
-        """Return how deep each of the day's seedbed passes goes."""
-        return programme.seedbed_depths(
-            self.seedbed,
-            self.seedbed_target_mm,
-            water.max_seedbed_application(self.soil_type),
-        )
+        """Return how deep each of the day's seedbed passes goes, or none if rain does it."""
+        if not self.germinating:
+            return []
+        regime = self.seedbed
+        cap = water.max_seedbed_application(self.soil_type)
+        depths = programme.seedbed_passes(regime, self.seedbed_target_mm, cap)
+        if depths:
+            return depths
+        if self.seedbed_rain_mm >= programme.SEEDBED_SOAKING_MM:
+            return []  # a real soaking: the sky has the day, and the seedbed is left alone
+        # A shower, not a soaking. It has taken the morning's passes off the day, and the
+        # last one stays: a daily total says nothing about the hour it fell at, and the risk
+        # of a dry afternoon is not worth the two millimetres saved.
+        return [min(regime.mm, cap)]
 
     @property
     def kept_height_mm(self) -> int:
@@ -279,6 +324,15 @@ class Context:
         from .climate import expected_rain
 
         return expected_rain(self.forecast_rain_24h_mm, self.skill)
+
+    @property
+    def expected_rain_tomorrow(self) -> float:
+        """Return tomorrow's forecast rain, weighted by the forecast's record here."""
+        from .climate import expected_rain
+
+        if self.forecast_rain_tomorrow_mm is None:
+            return 0.0
+        return expected_rain(self.forecast_rain_tomorrow_mm, self.skill)
 
     @property
     def expected_rain_72h(self) -> float:
@@ -940,22 +994,39 @@ def rule_germination(ctx: Context) -> list[Advice]:
     left = programme.SEED_GERMINATION_DAYS - (ctx.days_since_sowing or 0)
     regime = ctx.seedbed
     depths = ctx.seedbed_depths_mm
-    whole = ctx.seedbed_covers_zone
+    rain = ctx.seedbed_rain_mm
+    if not depths:
+        # The sky has the day. Said out loud rather than left as an absence: a seedbed line
+        # that quietly disappears on a wet day reads as the engine having forgotten the seed.
+        return [
+            Advice(
+                "seedbed_rain_enough",
+                "irrigation",
+                3,
+                {"expected_mm": round(rain, 1), "days_left": max(1, left)},
+                ("rain_keeps_the_seedbed_damp", "seed_germinating"),
+            )
+        ]
     params: dict[str, Any] = {
-        "times": regime.passes,
-        "mm": depths[0] if depths else regime.mm,
+        "times": len(depths),
+        "mm": depths[0],
         "daily_mm": round(sum(depths), 1),
         "days_left": max(1, left),
     }
-    if ctx.minutes_per_mm and depths:
+    if ctx.minutes_per_mm:
         params["minutes"] = max(1, round(depths[0] * ctx.minutes_per_mm))
     reasons = ["seed_germinating", "keep_the_seedbed_damp"]
     if regime is programme.CHITTED_SEEDBED:
         reasons.append("chitted_seed_cannot_dry")
-    if whole:
+    if ctx.seedbed_covers_zone:
         # The day's watering, not an addition to it, and the advice has to say so or it reads
         # as one more thing to do on top of a dawn cycle that is no longer running.
         reasons.append("seedbed_day_replaces_dawn_cycle")
+    if len(depths) < regime.passes:
+        # Fewer passes than the regime asks for, because rain is doing part of the day. Worth
+        # saying: three yesterday and one today, with nothing to explain it, looks like a bug.
+        reasons.append("rain_covers_part_of_the_day")
+        params["expected_rain_mm"] = round(rain, 1)
     return [Advice("germination_watering", "irrigation", 1, params, tuple(reasons))]
 
 
@@ -1048,6 +1119,7 @@ ADVICE_CODES: tuple[str, ...] = (
     "scarify_now",
     "top_dress_now",
     "germination_watering",
+    "seedbed_rain_enough",
     "clear_leaves",
     "record_status_reminder",
     "lawn_poor_diagnosis",

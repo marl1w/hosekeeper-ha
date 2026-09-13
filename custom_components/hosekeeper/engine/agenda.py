@@ -73,6 +73,13 @@ class DayProjection:
     """
     forecast: bool = True
     """Whether a weather forecast covered this day, or the season's own rate stood in."""
+    seedbed_depths_mm: tuple[float, ...] = ()
+    """How the day's seedbed water is split into passes, if it has any.
+
+    Rain takes passes off a day, so this is not the regime's own count: a week with a wet
+    Thursday in it has a shorter Thursday. The agenda draws its lines from this, so the
+    calendar and the balance can never disagree about how often the lawn is being wetted.
+    """
     seedbed_day: bool = False
     """Whether this day's water is the seedbed's passes rather than a dawn cycle.
 
@@ -144,11 +151,16 @@ def project(
     # and those are surface water throughout: drawn, never credited. See DayProjection.
     seedbed_day = seedbed_left > 0 and ctx.seedbed_covers_zone
 
-    def seedbed_for(target_mm: float) -> tuple[float, float]:
-        """Return what a day's passes put on the lawn, as (into the balance, on the surface)."""
-        depths = programme.seedbed_depths(regime, target_mm if seedbed_day else 0.0, seedbed_cap)
+    def seedbed_for(owed_mm: float, rain_mm: float) -> tuple[float, float, tuple[float, ...]]:
+        """Return a day's passes as (into the balance, on the surface, the passes themselves).
+
+        Rain does the seedbed's job as well as the sprinklers do, so it comes off the day
+        before the passes are counted out -- and a day the rain covers gets none at all.
+        """
+        owed = max(owed_mm, regime.daily_mm) if seedbed_day else regime.daily_mm
+        depths = tuple(programme.seedbed_passes(regime, max(0.0, owed - rain_mm), seedbed_cap))
         total = round(sum(depths), 1)
-        return (total, 0.0) if seedbed_day else (0.0, total)
+        return (total, 0.0, depths) if seedbed_day else (0.0, total, depths)
 
     out: list[DayProjection] = []
 
@@ -162,9 +174,13 @@ def project(
         if offset == 0:
             # Today's rain and water use are already in the deficit the coordinator handed
             # over; only what is still to run is to come.
-            irrigation, surface = 0.0, 0.0
+            irrigation, surface, passes = 0.0, 0.0, ()
             if sowing_today:
-                irrigation, surface = seedbed_for(ctx.seedbed_target_mm)
+                # Today's own figures, so the week's first day says exactly what the plan
+                # the coordinator settled this morning says.
+                passes = tuple(ctx.seedbed_depths_mm)
+                total = round(sum(passes), 1)
+                irrigation, surface = (total, 0.0) if seedbed_day else (0.0, total)
             if not (sowing_today and seedbed_day):
                 irrigation += float(advised_now.params.get("mm", 0.0)) if advised_now else 0.0
             deficit = water.next_deficit(deficit, 0.0, 0.0, irrigation, soil)
@@ -177,17 +193,20 @@ def project(
                     deficit,
                     surface,
                     fc is not None,
+                    passes,
                     sowing_today and seedbed_day,
                 )
             )
             continue
         irrigation = 0.0
         surface = 0.0
+        passes: tuple[float, ...] = ()
         wanted = deficit + etc - water.effective_rain(rain)
         if sowing_today:
             # The seedbed is put back to full every day rather than run down to a threshold:
-            # the seed lives in the top centimetre, which is either damp or it is not.
-            irrigation, surface = seedbed_for(wanted)
+            # the seed lives in the top centimetre, which is either damp or it is not. Rain
+            # expected that day does the same job and comes off what the passes have to do.
+            irrigation, surface, passes = seedbed_for(wanted, rain)
         if not (sowing_today and seedbed_day) and not dormant and wanted >= threshold:
             # A lawn whose seed is only in patches still has its dawn cycle to run.
             candidate = round(max(0.0, deficit * ctx.irrigation_factor - rain))
@@ -203,6 +222,7 @@ def project(
                 deficit,
                 surface,
                 fc is not None,
+                passes,
                 sowing_today and seedbed_day,
             )
         )
@@ -247,7 +267,8 @@ def build(
     }
 
     # --- irrigation: from the projection, so the chart and the plan agree ---------------
-    for day in project(ctx, forecast, advice, latitude=latitude):
+    projection = project(ctx, forecast, advice, latitude=latitude)
+    for day in projection:
         if day.irrigation_mm <= 0:
             continue
         if day.seedbed_day:
@@ -270,6 +291,9 @@ def build(
     # --- the seedbed, every day until the seed is up -------------------------------------
     if ctx.germinating and not ctx.new_lawn:
         left = programme.SEED_GERMINATION_DAYS - (ctx.days_since_sowing or 0)
+        # From the projection, so a day the forecast has rain on carries the shorter round of
+        # passes the balance is already counting on -- or none, when the rain covers the day.
+        projected = {day.date: day for day in projection}
         for offset in range(HORIZON_DAYS):
             if offset >= left:
                 break
@@ -277,15 +301,17 @@ def build(
             if offset == 0 and "seedbed_watering" in ctx.done_today:
                 continue  # done today; tomorrow asks again
             regime = ctx.seedbed
-            depths = ctx.seedbed_depths_mm
-            each_mm = depths[0] if depths else regime.mm
+            depths = list(projected[date].seedbed_depths_mm) if date in projected else []
+            if not depths:
+                continue  # rain is keeping the seedbed damp; the advice says so
+            each_mm = depths[0]
             params: dict[str, Any] = {
-                "times": regime.passes,
+                "times": len(depths),
                 "mm": each_mm,
                 # The hours the regime runs to, so a day still to be decided is drawn the
                 # way the morning will actually lay it out. Chitted seed is on five of them,
                 # not the ordinary three.
-                "hours": [at.strftime("%H:%M") for at in regime.times],
+                "hours": [at.strftime("%H:%M") for at in regime.times[-len(depths) :]],
             }
             if minutes_per_mm:
                 # How long to run, which on a lawn with a system on it is the only number

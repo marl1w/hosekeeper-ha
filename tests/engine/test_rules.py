@@ -444,7 +444,9 @@ def test_a_lawn_sown_all_over_is_watered_by_its_seedbed_and_not_at_dawn_as_well(
     # and the lawn around them keeps the deep cycle it still needs.
     patches = _ctx(days_since_sowing=2, sowing_kind="repair", deficit_mm=25.0)
     assert not patches.seedbed_covers_zone
-    assert patches.seedbed_target_mm == 0.0
+    # The dawn cycle does the root zone, so the patches owe only the damp floor -- the
+    # deficit, however deep, is none of their business.
+    assert patches.seedbed_target_mm == programme.STANDARD_SEEDBED.daily_mm
     advice = rules.evaluate(patches)
     patched = next(a for a in advice if a.code == "germination_watering")
     assert patched.params["mm"] == programme.STANDARD_SEEDBED.mm
@@ -522,3 +524,65 @@ def test_the_cut_that_was_made_sets_the_interval_not_the_one_that_was_wanted() -
 
     # With nothing recorded the target is still the best guess there is.
     assert _ctx().kept_height_mm == 75
+
+
+def test_rain_expected_tomorrow_takes_passes_off_the_seedbed() -> None:
+    """The passes are watering, and watering that rain has already done is waste.
+
+    Worse than waste on a seedbed: water on a canopy at an hour nothing will dry it is what
+    damping-off and dollar spot want, and running sprinklers into rain is the thing that
+    makes somebody stop trusting the advice.
+    """
+    dry = _ctx(days_since_sowing=3, sowing_kind="overseed", deficit_mm=6.2)
+    assert len(dry.seedbed_depths_mm) == programme.STANDARD_SEEDBED.passes
+
+    # A shower takes the morning off the day and leaves the late pass, because a daily total
+    # says nothing about the hour it fell at.
+    shower = _ctx(
+        days_since_sowing=3, sowing_kind="overseed", deficit_mm=0.0, forecast_rain_tomorrow_mm=6.0
+    )
+    assert len(shower.seedbed_depths_mm) == 1
+    advice = next(a for a in rules.evaluate(shower) if a.code == "germination_watering")
+    assert advice.params["times"] == 1
+    assert "rain_covers_part_of_the_day" in advice.reasons
+
+    # A real soaking takes the whole day, and says so rather than going quiet.
+    soaked = _ctx(
+        days_since_sowing=3, sowing_kind="overseed", deficit_mm=0.0, forecast_rain_tomorrow_mm=25.0
+    )
+    assert soaked.seedbed_depths_mm == []
+    rained = next(a for a in rules.evaluate(soaked) if a.code == "seedbed_rain_enough")
+    assert rained.params["expected_mm"] > 0
+    assert "rain_keeps_the_seedbed_damp" in rained.reasons
+    assert "germination_watering" not in _codes(rules.evaluate(soaked))
+
+
+def test_the_seedbed_reads_tomorrows_rain_not_this_afternoons() -> None:
+    """The passes run in tomorrow's daylight, and the plan is made the evening before.
+
+    The 24-hour figure is today and tomorrow together, which is the right window for a cycle
+    that runs before tomorrow's dawn and the wrong one here: rain forecast for this afternoon
+    is in the balance by the time these passes run, and counting it twice leaves a seedbed
+    dry on the strength of rain that already fell.
+    """
+    today_only = _ctx(
+        days_since_sowing=3,
+        sowing_kind="overseed",
+        deficit_mm=6.2,
+        forecast_rain_24h_mm=20.0,
+        forecast_rain_tomorrow_mm=0.0,
+    )
+    assert today_only.seedbed_rain_mm == 0.0
+    assert len(today_only.seedbed_depths_mm) == programme.STANDARD_SEEDBED.passes
+
+
+def test_a_patch_repair_is_rained_off_too_but_keeps_its_dawn_cycle() -> None:
+    """Rain wets a patch of seed as well as it wets a whole lawn."""
+    soaked = _ctx(
+        days_since_sowing=3, sowing_kind="repair", deficit_mm=25.0, forecast_rain_tomorrow_mm=25.0
+    )
+    assert soaked.seedbed_depths_mm == []
+    codes = _codes(rules.evaluate(soaked))
+    assert "seedbed_rain_enough" in codes
+    # The root zone is still 25 mm down and the turf around the patches still has roots in it.
+    assert "irrigate_now" in codes or "hold_irrigation_rain_coming" in codes

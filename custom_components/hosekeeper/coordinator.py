@@ -811,9 +811,8 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
                     minutes_per_mm,
                     self._germination_offset(target_date),
                     result.seedbed,
+                    result.seedbed_depths_mm,
                     whole_zone=result.seedbed_covers_zone,
-                    target_mm=result.seedbed_target_mm,
-                    soil_type=self.field.soil_type,
                 )
             today["irrigation_plan"] = current.as_dict()
             self._chain_register(
@@ -855,7 +854,7 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             # And a lawn sown all over has no dawn cycle for the fortnight: these passes are
             # the whole of its watering, so they carry what the root zone is down by.
             seedbed_whole_zone=result.seedbed_covers_zone,
-            seedbed_target_mm=result.seedbed_target_mm,
+            seedbed_depths=result.seedbed_depths_mm,
         )
         if revision is not None:
             fresh = schedule.revised(fresh, wetter=revision)

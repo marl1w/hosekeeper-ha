@@ -303,22 +303,43 @@ CHITTED_SEEDBED = SeedbedRegime(
 )
 
 
-def seedbed_depths(regime: SeedbedRegime, target_mm: float, cap_mm: float) -> list[float]:
-    """Return how deep each of the day's passes goes, to cover `target_mm` between them.
+# What rain has to come to before a seedbed's day is called off entirely.
+#
+# A forecast gives a day's total and says nothing about when in the day it falls. Six
+# millimetres at three in the morning leaves a seedbed dry by five in the afternoon, and a
+# seedbed allowed to dry once is a seedbed sown twice -- the loss is not symmetrical, so the
+# caution is not either. Rain therefore comes off what the day owes, which is enough to stop
+# the sprinklers running into a wet morning, but the last pass of the day is kept until the
+# rain is heavy enough that the surface cannot plausibly have dried before dark.
+SEEDBED_SOAKING_MM = 15.0
+
+
+def seedbed_passes(regime: SeedbedRegime, day_mm: float, cap_mm: float) -> list[float]:
+    """Return the depths of the passes a day needs, to put `day_mm` on between them.
 
     A sown lawn is not watered to a schedule of fixed millimetres. It has two jobs at once:
-    the surface has to stay damp, which is a floor under every pass however little the lawn
-    is using, and the root zone underneath still has to be replaced, which on a hot week is
-    more than the floor comes to. So the day's need is divided over the passes, held up to
-    the floor and down to what sown ground can take without the seed moving. What will not
-    fit is not forced into the day -- the surface would shed it -- and the balance carries
-    the rest into tomorrow, which is what it is for.
+    the surface has to stay damp, which is a floor under the day however little the lawn is
+    using, and the root zone underneath still has to be replaced, which on a hot week is more
+    than the floor comes to. The caller works out what the day owes, rain included; this
+    divides it into runs, each held up to the floor and down to what sown ground can take
+    without the seed moving. What will not fit is not forced into the day -- the surface would
+    shed it -- and the balance carries the rest into tomorrow, which is what it is for.
+
+    A day that owes less than one pass gets none. Watering a seedbed is not a ritual: when
+    rain has done the job, half a millimetre spread over three runs wets nothing, costs the
+    water anyway, and leaves a canopy damp at an hour nothing will dry it. Fewer, proper
+    passes beat more, token ones -- and the ones kept are the late ones, because the surface
+    is wettest in the morning, from dew and from whatever fell overnight, and driest by the
+    end of the afternoon.
     """
-    if not regime.passes:
+    if not regime.passes or day_mm <= 0:
         return []
     floor = min(regime.mm, cap_mm)
-    share = max(floor, min(cap_mm, target_mm / regime.passes))
-    return [round(share, 1)] * regime.passes
+    if day_mm < floor:
+        return []
+    count = min(regime.passes, max(1, int(day_mm // floor)))
+    share = max(floor, min(cap_mm, day_mm / count))
+    return [round(share, 1)] * count
 
 
 def seedbed_regime(*, pre_germinated: bool, days_since_sowing: int | None) -> SeedbedRegime:
