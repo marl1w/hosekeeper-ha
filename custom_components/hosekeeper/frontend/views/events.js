@@ -29,7 +29,11 @@ export function eventTitle(event, lang, locale, snapshot) {
     if (typeof value === "number") params[key] = fmtNumber(value, locale, Number.isInteger(value) ? 0 : 1);
   }
   // A split watering names its run, so three entries in one morning are not three waterings.
-  const code = event.code === "irrigate" && params.of ? "irrigate_cycle" : event.code;
+  // And a seedbed's passes name their run time when the lawn has a system whose rate is
+  // known: "2.1 mm" is not a figure anybody can set a controller to.
+  let code = event.code;
+  if (code === "irrigate" && params.of) code = "irrigate_cycle";
+  else if (code === "germination_watering" && params.minutes) code = "germination_watering_timed";
   const fromEvents = s.events[code];
   if (fromEvents) {
     const title = fill(fromEvents, params, locale);

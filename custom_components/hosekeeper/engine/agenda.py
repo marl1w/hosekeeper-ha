@@ -73,6 +73,15 @@ class DayProjection:
     """
     forecast: bool = True
     """Whether a weather forecast covered this day, or the season's own rate stood in."""
+    seedbed_day: bool = False
+    """Whether this day's water is the seedbed's passes rather than a dawn cycle.
+
+    The depth is in `irrigation_mm` either way, because it is water the root zone gets and
+    the balance has to know about it. What this says is how it is delivered, and the agenda
+    needs to know: the day already carries a line asking for those passes, so writing a
+    second one asking for a watering describes the same water twice -- and the second one
+    cannot be ticked off, because nothing a person does makes a projection go away.
+    """
 
     def as_dict(self) -> dict[str, Any]:
         """Return the shape the panel's charts read, matching a diary day."""
@@ -85,6 +94,7 @@ class DayProjection:
             "deficit_mm": round(self.deficit_mm, 1),
             "projected": True,
             "forecast": self.forecast,
+            "seedbed_day": self.seedbed_day,
         }
 
 
@@ -167,6 +177,7 @@ def project(
                     deficit,
                     surface,
                     fc is not None,
+                    sowing_today and seedbed_day,
                 )
             )
             continue
@@ -183,7 +194,18 @@ def project(
             if candidate >= 3:
                 irrigation += float(candidate)
         deficit = water.next_deficit(deficit, etc, rain, irrigation, soil)
-        out.append(DayProjection(date, rain, etc, irrigation, deficit, surface, fc is not None))
+        out.append(
+            DayProjection(
+                date,
+                rain,
+                etc,
+                irrigation,
+                deficit,
+                surface,
+                fc is not None,
+                sowing_today and seedbed_day,
+            )
+        )
     return out
 
 
@@ -228,6 +250,12 @@ def build(
     for day in project(ctx, forecast, advice, latitude=latitude):
         if day.irrigation_mm <= 0:
             continue
+        if day.seedbed_day:
+            # The seedbed's own line below is this day's watering. Two lines for one lot of
+            # water read as two jobs, and the second could never be ticked off: it is drawn
+            # from the projection, so confirming it wrote an irrigation into the balance that
+            # nobody ran and left the row exactly where it was.
+            continue
         params: dict[str, Any] = {"mm": round(day.irrigation_mm)}
         if minutes_per_mm:
             # The same split the planner uses, so the agenda cannot promise one long run
@@ -250,19 +278,26 @@ def build(
                 continue  # done today; tomorrow asks again
             regime = ctx.seedbed
             depths = ctx.seedbed_depths_mm
+            each_mm = depths[0] if depths else regime.mm
+            params: dict[str, Any] = {
+                "times": regime.passes,
+                "mm": each_mm,
+                # The hours the regime runs to, so a day still to be decided is drawn the
+                # way the morning will actually lay it out. Chitted seed is on five of them,
+                # not the ordinary three.
+                "hours": [at.strftime("%H:%M") for at in regime.times],
+            }
+            if minutes_per_mm:
+                # How long to run, which on a lawn with a system on it is the only number
+                # anybody can act on: "2.1 mm" is not something a controller can be set to.
+                params["minutes"] = max(1, round(each_mm * minutes_per_mm))
+                params["total_minutes"] = params["minutes"] * regime.passes
             items.append(
                 AgendaItem(
                     date.isoformat(),
                     "germination_watering",
                     "irrigation",
-                    {
-                        "times": regime.passes,
-                        "mm": depths[0] if depths else regime.mm,
-                        # The hours the regime runs to, so a day still to be decided is drawn
-                        # the way the morning will actually lay it out. Chitted seed is on
-                        # five of them, not the ordinary three.
-                        "hours": [at.strftime("%H:%M") for at in regime.times],
-                    },
+                    params,
                     ("keep_the_seedbed_damp",),
                 )
             )

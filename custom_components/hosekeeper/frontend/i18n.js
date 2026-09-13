@@ -230,7 +230,7 @@ const en = {
     top_dress_now: { title: "Top dress", body: "A thin layer of sand or sandy compost over the aeration holes." },
     germination_watering: {
       title: "Keep the seedbed damp",
-      body: "{times} light waterings of about {mm} mm through the day — {daily_mm} mm in all — for another {days_left} days. The dawn cycle carries on for the lawn around the seed.",
+      body: "{times} light waterings of about {mm} mm — {minutes} minutes each — spread through the day, {daily_mm} mm in all, for another {days_left} days.",
     },
     clear_leaves: { title: "Clear fallen leaves", body: "Leaves left on the grass smother it and hold moisture; clear them weekly." },
     record_status_reminder: { title: "Rate the lawn", body: "A rating now and then is what lets the engine learn what works here." },
@@ -616,6 +616,7 @@ const it = {
     irrigation_done: "Irrigato {mm} mm",
     syringe: "Rinfrescata di mezzogiorno",
     germination_watering: "Bagnatura della semina, {times} × {mm} mm",
+    germination_watering_timed: "Bagnatura della semina, {times} × {minutes} min ({mm} mm)",
     mow: "Taglio a {height_mm} mm",
     rating: "Valutato {status}",
     issue: "Osservato: {issue}",
@@ -683,7 +684,7 @@ const it = {
     top_dress_now: { title: "Top dressing", body: "Un velo di sabbia o di compost sabbioso sopra i fori della carotatura." },
     germination_watering: {
       title: "Mantieni umido il letto di semina",
-      body: "{times} bagnature leggere da circa {mm} mm nell'arco della giornata — {daily_mm} mm in tutto — per altri {days_left} giorni. Il ciclo dell'alba continua per il prato intorno alla semina.",
+      body: "{times} bagnature leggere da circa {mm} mm — {minutes} minuti ciascuna — distribuite nell'arco della giornata, {daily_mm} mm in tutto, per altri {days_left} giorni.",
     },
     clear_leaves: { title: "Rimuovi le foglie cadute", body: "Le foglie lasciate sull'erba la soffocano e trattengono umidità: raccoglile ogni settimana." },
     record_status_reminder: { title: "Valuta il prato", body: "Una valutazione ogni tanto è ciò che permette al motore di imparare cosa funziona qui." },

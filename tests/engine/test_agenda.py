@@ -277,3 +277,64 @@ def test_a_robot_is_scheduled_on_its_own_cadence_not_the_push_mower_s() -> None:
         if i.code == "mow"
     ]
     assert all((b - a).days == 1 for a, b in itertools.pairwise(daily))
+
+
+def test_a_seedbed_day_carries_one_watering_line_not_two() -> None:
+    """The passes are the day's watering, so the day must not also ask for a dawn cycle.
+
+    The projection credits a seedbed day's passes to the balance, which is right, and the
+    agenda turned every credited day into an "irrigate" line -- so the day showed the same
+    water twice. Worse, the second line could not be ticked off: it is drawn from the
+    projection rather than from the diary, so confirming it wrote an irrigation nobody ran
+    and left the row exactly where it was.
+    """
+    ctx = _ctx(
+        today=TODAY, days_since_sowing=3, sowing_kind="overseed", deficit_mm=6.2, etc_today_mm=2.1
+    )
+    items = agenda.build(ctx, _forecast(), rules.evaluate(ctx), latitude=45.0, minutes_per_mm=3.0)
+    today = [i for i in items if i.date == TODAY.isoformat()]
+    codes = [i.code for i in today]
+    assert "germination_watering" in codes
+    assert "irrigate" not in codes, "the day asked for its water twice"
+
+    # A patch repair is the other way round: the turf around the seed still wants its cycle,
+    # so both lines belong on the day and both mean something different.
+    patched = _ctx(
+        today=TODAY, days_since_sowing=3, sowing_kind="repair", deficit_mm=25.0, etc_today_mm=2.1
+    )
+    both = [
+        i.code
+        for i in agenda.build(
+            patched, _forecast(), rules.evaluate(patched), latitude=45.0, minutes_per_mm=3.0
+        )
+        if i.date == TODAY.isoformat()
+    ]
+    assert "germination_watering" in both
+    assert "irrigate" in both
+
+
+def test_the_seedbed_line_says_how_long_to_run_for() -> None:
+    """A depth is not something a controller can be set to; minutes are."""
+    ctx = _ctx(
+        today=TODAY, days_since_sowing=3, sowing_kind="overseed", deficit_mm=6.2, etc_today_mm=2.1
+    )
+    item = next(
+        i
+        for i in agenda.build(
+            ctx, _forecast(), rules.evaluate(ctx), latitude=45.0, minutes_per_mm=3.0
+        )
+        if i.code == "germination_watering"
+    )
+    assert item.params["minutes"] == round(item.params["mm"] * 3.0)
+    assert item.params["total_minutes"] == item.params["minutes"] * item.params["times"]
+
+    # A lawn whose application rate was never given has no minutes to name, and says nothing
+    # rather than naming a wrong number.
+    silent = next(
+        i
+        for i in agenda.build(
+            ctx, _forecast(), rules.evaluate(ctx), latitude=45.0, minutes_per_mm=None
+        )
+        if i.code == "germination_watering"
+    )
+    assert "minutes" not in silent.params
