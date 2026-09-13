@@ -917,3 +917,37 @@ async def test_pre_germinated_seed_gets_the_tighter_schedule_through_the_service
     assert only_zone(entry).coordinator.data.irrigation_needed_mm == pytest.approx(
         sum(run["mm"] for run in runs), abs=0.1
     )
+
+
+@pytest.mark.usefixtures("weather_service", "station")
+async def test_a_plan_made_before_the_sowing_is_reshaped_not_kept(
+    hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
+) -> None:
+    """Settling the plan guards it from the weather, not from the lawn becoming a seedbed.
+
+    A plan already carrying seedbed passes was left exactly as it was, so a lawn whose sowing
+    was recorded after the plan was made -- or whose passes were added by an older version of
+    the engine -- kept a shape built for a lawn it no longer was, until the next day's plan
+    was built. On a real instance one zone of four sat on the old hours all day.
+    """
+    entry = await _setup(hass, field_data)
+    zone = only_zone(entry)
+    await hass.services.async_call(
+        DOMAIN,
+        "log_sowing",
+        {"zone_id": zone.zone_id, "kind": "overseed"},
+        blocking=True,
+    )
+    # A plan of the shape the old path produced: passes bolted onto the day, no dawn cycle
+    # taken back out and none of the reasons that say the day belongs to the seedbed.
+    stored = dict(zone.diary.today()["irrigation_plan"])
+    stored["reasons"] = ["keep_the_seedbed_damp"]
+    zone.diary.today()["irrigation_plan"] = stored
+    assert not schedule.IrrigationPlan.from_dict(stored).seedbed_day
+
+    await zone.coordinator.async_refresh()
+    await _settle(hass, freezer)
+
+    plan = zone.coordinator.data.irrigation_plan
+    assert "seedbed_day_replaces_dawn_cycle" in plan["reasons"], "the plan was not rebuilt"
+    assert [run["start"][11:16] for run in plan["germination"]] == ["09:00", "13:00", "17:00"]

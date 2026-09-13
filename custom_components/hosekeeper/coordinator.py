@@ -763,27 +763,38 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
         revision: bool | None = None
         if stored and stored.get("date") == target_date.isoformat():
             current = schedule.IrrigationPlan.from_dict(stored)
-            # The day the plan was made for can turn: an afternoon of rain nobody forecast,
-            # or a forecast that fills up after the decision was taken. The plan is settled so
-            # its depth cannot wobble with every refresh, but the same test the month's plan
-            # gets applies here -- a material change decides again, drift does not -- and only
-            # while the water is still to run, since a cycle already under way cannot be
-            # taken back. It used to be five millimetres of rain or nothing: 4.9 mm changed
-            # nothing at all and 5 mm cancelled the whole watering.
-            # A seedbed day is judged on its passes, which are its whole watering, and it
-            # has started once the first of them has: the same test, on the regime the day
-            # is actually on rather than on a dawn cycle it does not have.
-            first_start = (
-                current.germination[0].start
-                if current.seedbed_day and current.germination
-                else current.main_start
-            )
-            wanted = result.seedbed_target_mm if current.seedbed_day else needed_mm
-            running = first_start is not None and now >= first_start
-            rate = self.field.application_rate_mm_h
-            minutes_per_mm = (60.0 / rate) if rate else None
-            if not running and schedule.worth_rethinking(current.planned_mm, wanted):
-                revision = wanted < current.planned_mm
+            # Settling the plan protects it from the weather changing its mind. It is not
+            # meant to protect it from the lawn itself changing, and a lawn that has become a
+            # seedbed since the plan was made -- or stopped being one -- is a different lawn:
+            # the plan would otherwise keep a dawn cycle over new seed, or keep passes that
+            # are no longer the day's watering, until tomorrow's plan was built. Same rule as
+            # the month's plan, which is rebuilt when the setup it was built for moves.
+            if current.seedbed_day != (result.germinating and result.seedbed_covers_zone):
+                stored = None  # built for a lawn this no longer is: decide the day again
+            else:
+                # The day the plan was made for can turn: an afternoon of rain nobody
+                # forecast, or a forecast that fills up after the decision was taken. The plan
+                # is settled so its depth cannot wobble with every refresh, but the same test
+                # the month's plan gets applies here -- a material change decides again, drift
+                # does not -- and only while the water is still to run, since a cycle already
+                # under way cannot be taken back. It used to be five millimetres of rain or
+                # nothing: 4.9 mm changed nothing at all and 5 mm cancelled the whole
+                # watering.
+                #
+                # A seedbed day is judged on its passes, which are its whole watering, and it
+                # has started once the first of them has: the same test, on the regime the day
+                # is actually on rather than on a dawn cycle it does not have.
+                first_start = (
+                    current.germination[0].start
+                    if current.seedbed_day and current.germination
+                    else current.main_start
+                )
+                wanted = result.seedbed_target_mm if current.seedbed_day else needed_mm
+                running = first_start is not None and now >= first_start
+                rate = self.field.application_rate_mm_h
+                minutes_per_mm = (60.0 / rate) if rate else None
+                if not running and schedule.worth_rethinking(current.planned_mm, wanted):
+                    revision = wanted < current.planned_mm
         if revision is None and stored and stored.get("date") == target_date.isoformat():
             # Heat does not always announce itself in time. The watering is decided once and
             # kept, so its depth cannot wobble; a syringing is a millimetre and a half that
