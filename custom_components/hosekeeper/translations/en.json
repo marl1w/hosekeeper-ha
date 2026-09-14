@@ -43,20 +43,28 @@
           "humidity_sensor": "Humidity",
           "wind_sensor": "Wind speed",
           "solar_sensor": "Solar radiation",
-          "soil_moisture_sensor": "Soil moisture",
-          "mower_entity": "Robot mower",
-          "deck_min_mm": "Lowest the mower cuts",
-          "deck_max_mm": "Highest the mower cuts",
-          "robot_cadence": "How often the robot goes out",
-          "hand_mower": "There is also a push mower"
+          "soil_moisture_sensor": "Soil moisture"
         },
         "data_description": {
           "rain_sensor": "A daily total that resets at midnight, or an ever-increasing total. Both are fine.",
-          "solar_sensor": "With humidity and wind this enables the full FAO-56 evapotranspiration model.",
+          "solar_sensor": "With humidity and wind this enables the full FAO-56 evapotranspiration model."
+        }
+      },
+      "mower": {
+        "title": "What cuts the lawn",
+        "description": "The mower decides how the advice is worded: what the deck can reach, how often the machine goes out, and what cuts the lawn in the fortnight a robot has to stay off new seed.",
+        "data": {
+          "mower_entity": "Robot mower",
+          "robot_cadence": "How often the robot goes out",
+          "hand_mower": "There is also a push mower",
+          "deck_min_mm": "Lowest the mower cuts",
+          "deck_max_mm": "Highest the mower cuts"
+        },
+        "data_description": {
           "mower_entity": "Each mowing session is logged as a mow.",
-          "deck_min_mm": "Optional, both together: the range on the mower's dial or deck. Advice is kept inside it, so a robot that stops at 60 mm is never asked for 75.",
           "robot_cadence": "Every pass has the lawn occupied and goes over the same ground, so a gentler cadence leaves it alone between cuts. Ignored where there is no robot.",
-          "hand_mower": "A robot has to stay off new seed for a fortnight, and the cut still has to be made. With a push mower the advice is to use it; without one it is to send the robot over once, high, and dock it again. Ignored where there is no robot."
+          "hand_mower": "A robot has to stay off new seed for a fortnight, and the cut still has to be made. With a push mower the advice is to use it; without one it is to send the robot over once, high, and dock it again. Ignored where there is no robot.",
+          "deck_min_mm": "Optional, both together: the range on the mower's dial or deck. Advice is kept inside it, so a robot that stops at 60 mm is never asked for 75."
         }
       }
     },

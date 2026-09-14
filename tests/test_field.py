@@ -5,9 +5,12 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
+from homeassistant.const import CONF_NAME
 import pytest
 
+from custom_components.hosekeeper.config_flow import _zone_schema
 from custom_components.hosekeeper.const import (
+    CONF_AREA,
     CONF_FLOW_L_MIN,
     CONF_HAND_MOWER,
     CONF_IRRIGATION_TYPE,
@@ -75,3 +78,15 @@ def test_a_push_mower_is_assumed_until_the_setup_says_otherwise(
     """Most lawns have something that can be pushed over them, and the old entries say nothing."""
     assert FieldConfig.from_data(field_data).hand_mower is True
     assert FieldConfig.from_data(field_data | {CONF_HAND_MOWER: False}).hand_mower is False
+
+
+def test_the_shed_belongs_to_the_lawn_not_to_each_zone(field_data: dict[str, Any]) -> None:
+    """What is in the shed is one answer for the whole turf, like the robot beside it.
+
+    It is asked on the lawn's own step and never on a zone's, so a lawn with four zones says
+    once that it has no push mower and every zone of it is advised accordingly.
+    """
+    lawn = field_data | {CONF_HAND_MOWER: False}
+    for zone in ({CONF_NAME: "North"}, {CONF_NAME: "South", CONF_AREA: 40.0}):
+        assert FieldConfig.from_entry(lawn, zone).hand_mower is False
+    assert CONF_HAND_MOWER not in _zone_schema({}).schema, "the zone step must not ask again"

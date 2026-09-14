@@ -43,20 +43,28 @@
           "humidity_sensor": "Umidità",
           "wind_sensor": "Vento",
           "solar_sensor": "Radiazione solare",
-          "soil_moisture_sensor": "Umidità del suolo",
-          "mower_entity": "Robot rasaerba",
-          "deck_min_mm": "Altezza di taglio minima",
-          "deck_max_mm": "Altezza di taglio massima",
-          "robot_cadence": "Frequenza dei passaggi del robot",
-          "hand_mower": "C'è anche un rasaerba a spinta"
+          "soil_moisture_sensor": "Umidità del suolo"
         },
         "data_description": {
           "rain_sensor": "Un totale giornaliero che si azzera a mezzanotte oppure un totale progressivo: vanno bene entrambi.",
-          "solar_sensor": "Insieme a umidità e vento permette di calcolare l'evapotraspirazione con il metodo completo FAO-56 Penman-Monteith.",
+          "solar_sensor": "Insieme a umidità e vento permette di calcolare l'evapotraspirazione con il metodo completo FAO-56 Penman-Monteith."
+        }
+      },
+      "mower": {
+        "title": "Chi taglia il prato",
+        "description": "Il rasaerba decide come sono scritti i consigli: fin dove arriva il piatto, quanto spesso esce la macchina e chi taglia nelle due settimane in cui il robot deve stare lontano dalla nuova semina.",
+        "data": {
+          "mower_entity": "Robot rasaerba",
+          "robot_cadence": "Frequenza dei passaggi del robot",
+          "hand_mower": "C'è anche un rasaerba a spinta",
+          "deck_min_mm": "Altezza di taglio minima",
+          "deck_max_mm": "Altezza di taglio massima"
+        },
+        "data_description": {
           "mower_entity": "Ogni ciclo di lavoro del robot viene registrato come un taglio.",
-          "deck_min_mm": "Facoltative, ma vanno indicate entrambe: l'escursione del piatto o della regolazione del rasaerba. I consigli restano dentro questo intervallo, così a un robot che arriva a 60 mm non viene mai chiesto un taglio a 75.",
           "robot_cadence": "Ogni passaggio tiene il prato occupato e ripassa sempre le stesse tracce: una frequenza più bassa lo lascia tranquillo tra un taglio e l'altro. Ignorata se non c'è un robot.",
-          "hand_mower": "Dopo una semina il robot deve stare fermo due settimane, ma il taglio va fatto lo stesso. Con un rasaerba a spinta il consiglio è di usarlo; senza, di far passare il robot una volta sola, alto, e rimetterlo in base. Ignorata se non c'è un robot."
+          "hand_mower": "Dopo una semina il robot deve stare fermo due settimane, ma il taglio va fatto lo stesso. Con un rasaerba a spinta il consiglio è di usarlo; senza, di far passare il robot una volta sola, alto, e rimetterlo in base. Ignorata se non c'è un robot.",
+          "deck_min_mm": "Facoltative, ma vanno indicate entrambe: l'escursione del piatto o della regolazione del rasaerba. I consigli restano dentro questo intervallo, così a un robot che arriva a 60 mm non viene mai chiesto un taglio a 75."
         }
       }
     },

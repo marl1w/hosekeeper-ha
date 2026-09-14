@@ -252,6 +252,15 @@ def invent(
         deciduous_trees=any(f["kind"] == "deciduous_tree" for f in field["features"]),
         elevation_m=float(lawn.get("elevation", 280)),
         robot_mower=bool(field.get("mower_entity")),
+        robot_cadence=field.get("robot_cadence") or "balanced",
+        deck_mm=(
+            (int(field["deck_min_mm"]), int(field["deck_max_mm"]))
+            if field.get("deck_min_mm") and field.get("deck_max_mm")
+            else None
+        ),
+        # Set "hand_mower": false on a lawn in the sample to see the fortnight after a
+        # sowing as somebody who owns only a robot is told to spend it.
+        hand_mower=bool(field.get("hand_mower", True)),
     )
     # The week ahead, carried forward from the days just gone: the mean of the last three,
     # held flat, and no rain. The preview used to roll dice for the forecast rain, which is

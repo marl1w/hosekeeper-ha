@@ -1,4 +1,4 @@
-"""The config flow: a lawn in three steps, then a zone at a time on top of it.
+"""The config flow: a lawn in four steps, then a zone at a time on top of it.
 
 The split is the point of the shape. Where the lawn is, what soil it sits on, what grows on
 it and what waters it are asked once; how big a zone is, how much sun it gets and which valve
@@ -18,17 +18,21 @@ from homeassistant.data_entry_flow import FlowResultType
 
 from custom_components.hosekeeper.const import (
     CONF_AREA,
+    CONF_DECK_MAX_MM,
+    CONF_DECK_MIN_MM,
     CONF_ESTABLISHMENT_DATE,
     CONF_ESTABLISHMENT_METHOD,
     CONF_EXPOSURE,
     CONF_FEATURES,
     CONF_FLOW_L_MIN,
     CONF_GRASS_TYPE,
+    CONF_HAND_MOWER,
     CONF_IRRIGATION_TYPE,
     CONF_LOCATION,
     CONF_MOWER_ENTITY,
     CONF_PRECIPITATION_RATE,
     CONF_RAIN_SENSOR,
+    CONF_ROBOT_CADENCE,
     CONF_SOIL_MOISTURE_SENSOR,
     CONF_SOIL_TYPE,
     CONF_VALVE_ENTITY,
@@ -48,6 +52,7 @@ LAWN_STEP = (
 )
 IRRIGATION_STEP = (CONF_IRRIGATION_TYPE, CONF_FLOW_L_MIN)
 SOURCES_STEP = (CONF_WEATHER_ENTITY, CONF_RAIN_SENSOR)
+MOWER_STEP = (CONF_MOWER_ENTITY,)
 ZONE_STEP = (CONF_NAME, CONF_AREA, CONF_EXPOSURE)
 
 
@@ -56,7 +61,7 @@ def _pick(data: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
 
 
 async def _garden(hass: HomeAssistant, lawn_data: dict[str, Any]) -> dict[str, Any]:
-    """Walk the three steps that describe a property, and return the result."""
+    """Walk the steps that describe a property, and return the result."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
@@ -66,12 +71,15 @@ async def _garden(hass: HomeAssistant, lawn_data: dict[str, Any]) -> dict[str, A
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], _pick(lawn_data, IRRIGATION_STEP)
     )
-    return await hass.config_entries.flow.async_configure(
+    result = await hass.config_entries.flow.async_configure(
         result["flow_id"], _pick(lawn_data, SOURCES_STEP)
+    )
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], _pick(lawn_data, MOWER_STEP)
     )
 
 
-async def test_the_lawn_is_created_from_three_steps(
+async def test_the_lawn_is_created_from_its_own_steps(
     hass: HomeAssistant, lawn_data: dict[str, Any]
 ) -> None:
     """Where it is, what it is made of, what waters it. Nothing about any one zone."""
@@ -225,8 +233,12 @@ async def test_the_lawn_is_reconfigured_in_place(
         result["flow_id"], {CONF_IRRIGATION_TYPE: "rotor", CONF_PRECIPITATION_RATE: 9.0}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {CONF_WEATHER_ENTITY: "weather.forecast_home", CONF_MOWER_ENTITY: "lawn_mower.robot"},
+        result["flow_id"], {CONF_WEATHER_ENTITY: "weather.forecast_home"}
+    )
+    # What cuts the lawn is its own step now, and the last one: the lawn is written when it
+    # is answered.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_MOWER_ENTITY: "lawn_mower.robot"}
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
@@ -297,3 +309,54 @@ async def test_a_subentry_that_is_not_a_lawn_is_ignored(
     assert entry.runtime_data.zones == {}
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_the_mower_is_asked_about_on_a_step_of_its_own(
+    hass: HomeAssistant, lawn_data: dict[str, Any]
+) -> None:
+    """What cuts the lawn is four answers read together, not one more sensor.
+
+    And it is asked of the lawn, once, like the robot it sits beside: a zone never answers
+    it, so every zone of a lawn with no push mower is advised the same way.
+    """
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _pick(lawn_data, LAWN_STEP)
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _pick(lawn_data, IRRIGATION_STEP)
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _pick(lawn_data, SOURCES_STEP)
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "mower"
+    assert {str(key) for key in result["data_schema"].schema} == {
+        CONF_MOWER_ENTITY,
+        CONF_ROBOT_CADENCE,
+        CONF_HAND_MOWER,
+        CONF_DECK_MIN_MM,
+        CONF_DECK_MAX_MM,
+    }
+
+    # A deck that reads high to low is a typo, and the step says so rather than storing it.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_DECK_MIN_MM: 60, CONF_DECK_MAX_MM: 20}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "deck_reversed"}
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_MOWER_ENTITY: "lawn_mower.robot",
+            CONF_HAND_MOWER: False,
+            CONF_DECK_MIN_MM: 20,
+            CONF_DECK_MAX_MM: 60,
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_HAND_MOWER] is False
+    assert result["data"][CONF_DECK_MAX_MM] == 60

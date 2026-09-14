@@ -28,7 +28,8 @@ shares is asked once, when the integration is added:
 | --- | --- |
 | `lawn` | name, latitude/longitude (defaults to the home zone), soil type, grass type, how the lawn was established (sod rolls, seed, hydroseed) and when |
 | `irrigation` | irrigation system type, flow rate (L/min) or precipitation rate (mm/h) |
-| `sources` | weather entity (required), optional observed sensors: rain total, temperature, humidity, wind, solar radiation, soil moisture; optional robot mower entity and the cutting heights its deck can be set to |
+| `sources` | weather entity (required), optional observed sensors: rain total, temperature, humidity, wind, solar radiation, soil moisture |
+| `mower` | optional robot mower entity, how often it goes out, whether there is a push mower as well, and the cutting heights the deck can be set to |
 
 `Add zone` on the lawn's card then asks what is particular to each part of it:
 
@@ -39,7 +40,7 @@ shares is asked once, when the integration is added:
 
 A `FieldConfig` — everything the engine needs about one piece of grass — is built by laying a
 zone's answers over its lawn's, so a zone can only ever add to what the lawn said. Both flows
-reconfigure: re-opening the lawn re-opens its three steps, a zone its two. Changing the sources
+reconfigure: re-opening the lawn re-opens its four steps, a zone its two. Changing the sources
 or the irrigation setup reloads the entry; the diaries are untouched.
 
 ### Diary — `Store` per entry

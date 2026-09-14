@@ -397,6 +397,11 @@ the same for the panel's event merging, which the tests had also been re-impleme
   Where there is no push mower the fortnight's advice is the other thing that can be done:
   one pass of the robot, high, on dry grass, off its schedule and back in the dock -- it is
   the same lines taken every day that pull seedlings up, not one crossing |
+| The mower asked about as one more sensor | it had become four answers -- the machine, how
+  often it goes out, what its deck reaches, whether there is a push mower as well -- read
+  together and buried at the bottom of the weather step. Now `mower` is a step of its own,
+  after `sources`, and the lawn is written when it is answered. It stays a question for the
+  lawn, never for a zone, like the robot it sits beside |
 
 ## Done in phase 4, after the first screenshots
 

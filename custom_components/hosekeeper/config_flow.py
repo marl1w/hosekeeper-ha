@@ -69,6 +69,7 @@ STEP_LAWN = "lawn"
 STEP_ZONE = "zone"
 STEP_IRRIGATION = "irrigation"
 STEP_SOURCES = "sources"
+STEP_MOWER = "mower"
 STEP_FEATURES = "features"
 
 # Sensors that are optional in the form arrive as a missing key when left empty; the
@@ -80,11 +81,14 @@ OPTIONAL_ENTITY_KEYS = (
     CONF_WIND_SENSOR,
     CONF_SOLAR_SENSOR,
     CONF_SOIL_MOISTURE_SENSOR,
-    CONF_MOWER_ENTITY,
 )
-# The mower's own deck is asked for on the same step, but it is a pair of numbers, not an
-# entity, so it is kept out of the check that no entity feeds two things at once.
-OPTIONAL_SOURCE_KEYS = (*OPTIONAL_ENTITY_KEYS, CONF_DECK_MIN_MM, CONF_DECK_MAX_MM)
+OPTIONAL_SOURCE_KEYS = OPTIONAL_ENTITY_KEYS
+# The mower is a step of its own. It started as one more entity on the sources step, and
+# stopped being one: what cuts the lawn is four answers now -- the machine, how often it
+# goes out, what its deck reaches and whether there is a push mower as well -- and they are
+# read together. The deck is a pair of numbers rather than an entity, so it stays out of the
+# check that no entity feeds two things at once.
+OPTIONAL_MOWER_KEYS = (CONF_MOWER_ENTITY, CONF_DECK_MIN_MM, CONF_DECK_MAX_MM)
 OPTIONAL_IRRIGATION_KEYS = (CONF_FLOW_L_MIN, CONF_PRECIPITATION_RATE)
 OPTIONAL_LAWN_KEYS = (CONF_ESTABLISHMENT_DATE,)
 OPTIONAL_ZONE_KEYS = (CONF_VALVE_ENTITY,)
@@ -212,6 +216,16 @@ def _sources_schema(defaults: dict[str, Any]) -> vol.Schema:
     schema |= optional(CONF_WIND_SENSOR, _sensor(SensorDeviceClass.WIND_SPEED))
     schema |= optional(CONF_SOLAR_SENSOR, _sensor(SensorDeviceClass.IRRADIANCE))
     schema |= optional(CONF_SOIL_MOISTURE_SENSOR, _sensor(SensorDeviceClass.MOISTURE))
+    return vol.Schema(schema)
+
+
+def _mower_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """Return the mower's own step: what cuts the lawn, how often, how low, and by hand."""
+
+    def optional(key: str, sel: selector.Selector) -> dict[vol.Marker, selector.Selector]:
+        return {vol.Optional(key, description={"suggested_value": defaults.get(key)}): sel}
+
+    schema: dict[vol.Marker, Any] = {}
     schema |= optional(
         CONF_MOWER_ENTITY,
         selector.EntitySelector(selector.EntitySelectorConfig(domain="lawn_mower")),
@@ -303,6 +317,11 @@ def _validate_sources(data: dict[str, Any]) -> dict[str, str]:
     chosen = [data[key] for key in (CONF_WEATHER_ENTITY, *OPTIONAL_ENTITY_KEYS) if data.get(key)]
     if len(chosen) != len(set(chosen)):
         return {"base": "duplicate_source"}
+    return {}
+
+
+def _validate_mower(data: dict[str, Any]) -> dict[str, str]:
+    """Return form errors for the mower step: a deck that reads low to high."""
     low, high = data.get(CONF_DECK_MIN_MM), data.get(CONF_DECK_MAX_MM)
     if low is not None and high is not None and float(low) > float(high):
         return {"base": "deck_reversed"}
@@ -387,6 +406,26 @@ class HosekeeperConfigFlow(ConfigFlow, domain=DOMAIN):
             errors = _validate_sources(user_input)
             if not errors:
                 _merge(self._data, user_input, OPTIONAL_SOURCE_KEYS)
+                return await self.async_step_mower()
+
+        defaults = dict(self._data)
+        if user_input is not None:
+            defaults.update(user_input)
+        if CONF_WEATHER_ENTITY not in defaults:
+            weather = self.hass.states.async_entity_ids("weather")
+            if len(weather) == 1:
+                defaults[CONF_WEATHER_ENTITY] = weather[0]
+        return self.async_show_form(
+            step_id=STEP_SOURCES, data_schema=_sources_schema(defaults), errors=errors
+        )
+
+    async def async_step_mower(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Say what cuts the lawn: the machine, its cadence, its deck, and the push mower."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            errors = _validate_mower(user_input)
+            if not errors:
+                _merge(self._data, user_input, OPTIONAL_MOWER_KEYS)
                 if self._reconfiguring:
                     # Updated, not `..._reload_and_abort`: writing the entry already fires
                     # the update listener that reloads it, and asking for a reload here as
@@ -402,12 +441,8 @@ class HosekeeperConfigFlow(ConfigFlow, domain=DOMAIN):
         defaults = dict(self._data)
         if user_input is not None:
             defaults.update(user_input)
-        if CONF_WEATHER_ENTITY not in defaults:
-            weather = self.hass.states.async_entity_ids("weather")
-            if len(weather) == 1:
-                defaults[CONF_WEATHER_ENTITY] = weather[0]
         return self.async_show_form(
-            step_id=STEP_SOURCES, data_schema=_sources_schema(defaults), errors=errors
+            step_id=STEP_MOWER, data_schema=_mower_schema(defaults), errors=errors
         )
 
     # ------------------------------------------------------------------ reconfigure
