@@ -131,6 +131,13 @@ class Context:
     robot_cadence: str = programme.DEFAULT_ROBOT_CADENCE
     """How often the robot is wanted out: frequent, balanced or gentle."""
     """A robot cuts a little every day rather than a third of the leaf every week."""
+    hand_mower: bool = True
+    """Whether there is a mower that can be pushed over the lawn by hand at all.
+
+    It matters for a fortnight a year and it matters a great deal: the cut a seedbed needs
+    is one the robot must not make, and telling somebody who owns only a robot to get the
+    push mower out is advice they cannot take. Then the honest answer is a different one.
+    """
 
     month_plan: list[Operation] | None = None
     """This month's planned operations; built from the plan module when None."""
@@ -513,17 +520,20 @@ def mower_held(ctx: Context) -> bool:
     )
 
 
-def robot_held(ctx: Context) -> bool:
+def robot_held(ctx: Context, days_ahead: int = 0) -> bool:
     """Return whether a robot should stay in its dock while the new seed roots.
 
     A blade set above the seedlings never touches them: what pulls them out is the wheels,
     going over the same lines again and again. So the lawn is still cut in this fortnight,
     by hand, and the robot waits for the seed to be rooted.
+
+    `days_ahead` asks the same question about a day later in the week, which is what the
+    calendar needs: a cut dated inside the fortnight is a cut the machine must not make.
     """
     return (
         ctx.robot_mower
         and ctx.days_since_sowing is not None
-        and ctx.days_since_sowing < programme.SEED_GERMINATION_DAYS
+        and ctx.days_since_sowing + days_ahead < programme.SEED_GERMINATION_DAYS
     )
 
 
@@ -544,6 +554,51 @@ def mowing_height(ctx: Context) -> int:
             or ctx.shaded_fraction >= 0.3
         ),
         lower=ctx.phase == "late_autumn" or "last_mow_lower" in planned,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class MowingPlan:
+    """What the next cut is set to, when it falls due, and what makes it."""
+
+    height_mm: int
+    """The height for a cut made on the day it is asked for."""
+    due_height_mm: int
+    """The height that cut would have been set to had it been made on time."""
+    interval_days: int | None
+    """How long after the last cut the next one falls due, or None on a dormant lawn."""
+    climbing: bool
+    """Whether the lawn is below its range and being walked back up to it."""
+
+
+def mowing_plan(
+    ctx: Context, days_since_mowing: int | None = None, kept_mm: float | None = None
+) -> MowingPlan:
+    """Return the cut the lawn is on, as the day, the week and the month all need it.
+
+    One place, because three parts of the engine ask: the day's advice, the week's calendar
+    and the month's line. They used to work it out separately and disagree -- the week put
+    "mow at 60 mm" on a lawn the day's advice was walking back up from a 20 mm scalp, which
+    is the height the lawn is going to eventually, not the one to set on the mower.
+
+    `days_since_mowing` is how long the leaf has been growing when the cut is made, which is
+    the context's own count for today and something else for a date later in the week; and
+    `kept_mm` is the height it was last cut to, which for the second cut of a week is the
+    first cut of that week rather than anything the diary has yet.
+    """
+    target = mowing_height(ctx)
+    kept = ctx.kept_height_mm if kept_mm is None else kept_mm
+    since = ctx.days_since_mowing if days_since_mowing is None else days_since_mowing
+    climbing = kept < ctx.mow_height_mm[0]
+    # Where the climb is going: half again the last cut, which is what a cut made on time
+    # would be set to. The interval follows from it, because that is the cut it is the wait
+    # for; a cut made late is made higher, but it does not fall due any later for that.
+    due_height = programme.recovery_height(kept, target) if climbing else target
+    return MowingPlan(
+        height_mm=programme.next_cut_height(kept, target, ctx.phase, since, ctx.mow_height_mm[1]),
+        due_height_mm=due_height,
+        interval_days=programme.days_to_grow(ctx.phase, kept, 1.5 * due_height),
+        climbing=climbing,
     )
 
 
@@ -578,9 +633,8 @@ def rule_mowing(ctx: Context) -> list[Advice]:
     # the leaf into it -- not the interval a lawn already at its target would be on.
     target = mowing_height(ctx)
     kept = ctx.kept_height_mm
-    climbing = kept < ctx.mow_height_mm[0]
-    height = programme.recovery_height(kept, target) if climbing else target
-    interval = programme.days_to_grow(ctx.phase, kept, 1.5 * height)
+    cut = mowing_plan(ctx)
+    climbing, height, interval = cut.climbing, cut.height_mm, cut.interval_days
     if interval is None:
         return [Advice("no_mowing_dormant", "mowing", 4, {}, ("dormant",))]
     since = ctx.days_since_mowing
@@ -606,15 +660,35 @@ def rule_mowing(ctx: Context) -> list[Advice]:
     if robot_held(ctx):
         # The lawn is still cut, and cut on time, but by hand: it is the wheels that pull
         # seedlings out, not the blade, which passes well above them.
+        #
+        # Unless there is no push mower in the shed, which is the ordinary case on a lawn
+        # the robot has always cut. Then "use the push mower" is not advice, and the choice
+        # is between the two things that can actually be done: leave the old grass standing
+        # over the seed for a fortnight, which is what overseeding dies of, or send the
+        # robot out once, high, on dry grass. One crossing is not what tears seedlings up --
+        # it is the same lines taken every day that do -- so the run is asked for as a
+        # single pass, off the schedule, and the machine goes back in the dock after it.
+        left = programme.SEED_GERMINATION_DAYS - ctx.days_since_sowing
+        if not ctx.hand_mower:
+            return [
+                Advice(
+                    "mow_one_robot_pass_while_seed_roots",
+                    "mowing",
+                    2,
+                    {"days_left": left, "height_mm": height},
+                    (
+                        "no_hand_mower",
+                        "robot_wheels_tear_seedlings",
+                        "old_grass_shades_the_seed",
+                    ),
+                )
+            ]
         return [
             Advice(
                 "mow_by_hand_while_seed_roots",
                 "mowing",
                 2,
-                {
-                    "days_left": programme.SEED_GERMINATION_DAYS - ctx.days_since_sowing,
-                    "height_mm": height,
-                },
+                {"days_left": left, "height_mm": height},
                 ("robot_wheels_tear_seedlings", "old_grass_shades_the_seed"),
             )
         ]
@@ -1098,6 +1172,7 @@ ADVICE_CODES: tuple[str, ...] = (
     "raise_height_after_low_cut",
     "hold_mowing_after_sowing",
     "mow_by_hand_while_seed_roots",
+    "mow_one_robot_pass_while_seed_roots",
     "feed_recently_done",
     "feed_wait",
     "feed_now",

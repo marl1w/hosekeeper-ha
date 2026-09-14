@@ -586,3 +586,50 @@ def test_a_patch_repair_is_rained_off_too_but_keeps_its_dawn_cycle() -> None:
     assert "seedbed_rain_enough" in codes
     # The root zone is still 25 mm down and the turf around the patches still has roots in it.
     assert "irrigate_now" in codes or "hold_irrigation_rain_coming" in codes
+
+
+def test_a_recovery_cut_made_late_is_made_higher_not_at_the_height_it_was_due_at() -> None:
+    """Half again the last cut is where the climb is going, not what today is allowed to do.
+
+    A sward taken to 20 mm before seed is due its next cut at 30 mm four days later. Left a
+    week, it is standing near 60 mm, and 30 mm then takes half the leaf off -- a scalp, on
+    grass that is also carrying new seed. The climb sets the floor; the leaf standing there
+    sets the floor under that, and the higher of the two is what the deck is set to.
+    """
+    on_time = _ctx(last_mow_height_mm=20, days_since_mowing=4)
+    assert rules.mowing_plan(on_time).height_mm == 30
+
+    late = _ctx(last_mow_height_mm=20, days_since_mowing=7)
+    cut = rules.mowing_plan(late)
+    assert cut.height_mm == 45, "two thirds of the leaf standing after a week of autumn growth"
+    assert cut.due_height_mm == 30, "and the climb it is still on says where it is going"
+    assert cut.height_mm % 5 == 0, "a deck is set in notches, not in millimetres"
+    # The cut does not fall due any later for being made higher.
+    assert cut.interval_days == rules.mowing_plan(on_time).interval_days
+
+
+def test_a_lawn_with_no_push_mower_is_told_what_it_can_actually_do() -> None:
+    """Telling somebody who owns only a robot to use the push mower is not advice.
+
+    The cut still has to be made -- the old grass shades the seedlings out -- so the answer
+    is the other thing that can be done: one pass, high, on dry grass, off the schedule.
+    """
+    robot_only = _ctx(
+        days_since_sowing=7,
+        establishment_age_days=92,
+        days_since_mowing=9,
+        robot_mower=True,
+        hand_mower=False,
+    )
+    advice = rules.evaluate(robot_only)
+    one_pass = next(a for a in advice if a.code == "mow_one_robot_pass_while_seed_roots")
+    assert one_pass.params["days_left"] == 7
+    assert "no_hand_mower" in one_pass.reasons
+    assert "robot_wheels_tear_seedlings" in one_pass.reasons
+    assert "mow_by_hand_while_seed_roots" not in _codes(advice)
+
+    # With a push mower in the shed the advice is still to use it.
+    with_hand = _ctx(
+        days_since_sowing=7, establishment_age_days=92, days_since_mowing=9, robot_mower=True
+    )
+    assert "mow_by_hand_while_seed_roots" in _codes(rules.evaluate(with_hand))

@@ -458,11 +458,19 @@ def build(ctx: Context) -> list[Operation]:
                     if not ctx.robot_mower or then.days_since_sowing is None
                     else programme.SEED_GERMINATION_DAYS - then.days_since_sowing
                 )
-                robot_waiting = left is not None and left * 2 >= _days_left_in(
-                    ctx.today, year, month
+                # ...and a month waits for the robot only where there is something else to
+                # cut with. Where there is not, the machine is still what cuts the month --
+                # what changes is the day's own advice, which asks for one pass rather than
+                # the routine while the seed roots.
+                robot_waiting = (
+                    ctx.hand_mower
+                    and left is not None
+                    and left * 2 >= _days_left_in(ctx.today, year, month)
                 )
                 if left is not None and left > 0 and code == "mow_routine":
                     tailoring.append("robot_wheels_tear_seedlings")
+                    if not ctx.hand_mower:
+                        tailoring.append("no_hand_mower")
                 robot = ctx.robot_mower and code == "mow_routine" and not robot_waiting
                 shaded = ctx.shaded_fraction >= 0.3
                 taller = phase == "summer_stress" or code == "raise_mowing_height"

@@ -384,6 +384,19 @@ the same for the panel's event merging, which the tests had also been re-impleme
   syringing when the passes are its whole watering, but the syringing a hot forecast adds to a
   plan already settled was asked for on the weather alone. It now asks the plan what kind of
   day it is, and one already stored with both goes back out while its hour is still ahead |
+| "Mow at 60 mm" on a lawn scalped to 20 mm for seed | three faults in one row, found on the
+  live instance. The week named the height the lawn is climbing *to* rather than the one to
+  set, because it worked the cut out itself instead of asking the rules; the climb was
+  measured from the last cut and ignored the leaf grown since, so a recovery cut made three
+  days late still said 30 mm over grass standing at 63, which is the scalp the third rule
+  exists to prevent; and a cut dated inside the germination fortnight carried nothing to say
+  the robot must not make it. Now one `mowing_plan` answers all three parts of the engine,
+  the third rule sets the floor under the climb, heights are rounded to a notch a deck can
+  actually be set to, and the week walks 20 mm up to 45 and then to 60 |
+| "Use the push mower" to somebody who owns only a robot | a new setup answer, `hand_mower`.
+  Where there is no push mower the fortnight's advice is the other thing that can be done:
+  one pass of the robot, high, on dry grass, off its schedule and back in the dock -- it is
+  the same lines taken every day that pull seedlings up, not one crossing |
 
 ## Done in phase 4, after the first screenshots
 

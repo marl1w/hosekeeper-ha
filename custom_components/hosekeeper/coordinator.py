@@ -299,6 +299,7 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             deciduous_trees=self.field.has_deciduous_trees,
             robot_mower=self.field.mower_entity is not None,
             robot_cadence=self.field.robot_cadence,
+            hand_mower=self.field.hand_mower,
             deck_mm=self.field.deck_mm,
             elevation_m=float(self.hass.config.elevation or 0),
         )

@@ -43,6 +43,7 @@ CONF_SOLAR_SENSOR: Final = "solar_sensor"
 CONF_SOIL_MOISTURE_SENSOR: Final = "soil_moisture_sensor"
 CONF_MOWER_ENTITY: Final = "mower_entity"
 CONF_ROBOT_CADENCE: Final = "robot_cadence"
+CONF_HAND_MOWER: Final = "hand_mower"
 CONF_DECK_MIN_MM: Final = "deck_min_mm"
 CONF_DECK_MAX_MM: Final = "deck_max_mm"
 

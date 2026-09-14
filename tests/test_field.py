@@ -9,6 +9,7 @@ import pytest
 
 from custom_components.hosekeeper.const import (
     CONF_FLOW_L_MIN,
+    CONF_HAND_MOWER,
     CONF_IRRIGATION_TYPE,
     CONF_PRECIPITATION_RATE,
 )
@@ -66,3 +67,11 @@ def test_shade_features_are_summed_and_capped(field_data: dict[str, Any]) -> Non
     assert shaded.shaded_fraction == pytest.approx(0.5)
     assert shaded.tree_fraction == pytest.approx(0.3)
     assert shaded.has_deciduous_trees
+
+
+def test_a_push_mower_is_assumed_until_the_setup_says_otherwise(
+    field_data: dict[str, Any],
+) -> None:
+    """Most lawns have something that can be pushed over them, and the old entries say nothing."""
+    assert FieldConfig.from_data(field_data).hand_mower is True
+    assert FieldConfig.from_data(field_data | {CONF_HAND_MOWER: False}).hand_mower is False

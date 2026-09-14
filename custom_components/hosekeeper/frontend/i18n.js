@@ -199,6 +199,10 @@ const en = {
       title: "Keep the mower off",
       body: "For another {days_left} days, until the seedlings reach about {height_mm} mm. There is nothing to cut yet, and a robot goes over the same ground again and again and pulls them out.",
     },
+    mow_one_robot_pass_while_seed_roots: {
+      title: "One pass of the robot, then dock it",
+      body: "Keep cutting on time at {height_mm} mm: left standing, the old grass shades the new seed out. With no push mower, send the robot over once on dry grass and put it back in the dock -- for another {days_left} days, do not let it run on its schedule. One crossing is not what pulls seedlings up; the same lines taken every day are.",
+    },
     mow_by_hand_while_seed_roots: {
       title: "Cut it, but by hand",
       body: "Keep cutting on time at {height_mm} mm: left standing, the old grass shades the new seed out. Use the push mower for another {days_left} days, with a sharp blade and the clippings collected. The blade passes well above the seedlings; it is the robot's wheels, over the same lines every day, that pull them up.",
@@ -328,6 +332,7 @@ const en = {
     lawn_dense_overseed_optional: "the lawn is dense, so overseeding is optional",
     no_weeds_reported_optional: "no weeds reported, so this pass is optional",
     robot_wheels_tear_seedlings: "the robot's wheels track the same lines and pull seedlings up",
+    no_hand_mower: "there is no push mower, so the cut the seedbed needs has to be one careful pass of the robot",
     old_grass_shades_the_seed: "the established grass, left uncut, shades the new seed out",
     brown_patches_seen: "brown patches reported on the lawn",
     young_grass_spot_treat: "the reseeding is recent: spot-treat rather than spraying the whole lawn",
@@ -659,6 +664,10 @@ const it = {
       title: "Tieni fermo il rasaerba",
       body: "Per altri {days_left} giorni, finché le piantine non raggiungono circa {height_mm} mm. Non c'è ancora nulla da tagliare, e il robot ripassa sempre sugli stessi punti e le sradica.",
     },
+    mow_one_robot_pass_while_seed_roots: {
+      title: "Un solo passaggio del robot, poi in base",
+      body: "Continua a tagliare regolarmente a {height_mm} mm: il cotico vecchio lasciato alto soffoca la nuova semina. Senza rasaerba a spinta, fai passare il robot una volta sola a prato asciutto e rimettilo subito in base: per altri {days_left} giorni non lasciarlo lavorare a programma. A sradicare le piantine non è un passaggio, sono le stesse linee ripassate ogni giorno.",
+    },
     mow_by_hand_while_seed_roots: {
       title: "Taglia, ma a mano",
       body: "Continua a tagliare regolarmente a {height_mm} mm: il cotico vecchio lasciato alto soffoca la nuova semina. Per altri {days_left} giorni usa il rasaerba a spinta, con lama affilata e raccolta del tagliato. La lama passa ben sopra le piantine: a sradicarle sono le ruote del robot, che ogni giorno ripassano sulle stesse linee.",
@@ -788,6 +797,7 @@ const it = {
     lawn_dense_overseed_optional: "il prato è fitto: la trasemina è facoltativa",
     no_weeds_reported_optional: "nessuna infestante segnalata: passaggio facoltativo",
     robot_wheels_tear_seedlings: "le ruote del robot ripassano sulle stesse linee e sradicano le piantine",
+    no_hand_mower: "non c'è un rasaerba a spinta: il taglio sulla semina va fatto con un solo passaggio attento del robot",
     old_grass_shades_the_seed: "il cotico vecchio non tagliato soffoca la nuova semina",
     brown_patches_seen: "segnalate chiazze secche sul prato",
     young_grass_spot_treat: "risemina recente: intervieni localizzato, non a tappeto",

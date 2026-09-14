@@ -53,7 +53,10 @@ def test_mowing_follows_the_interval_and_dodges_rain() -> None:
     )
     mows = [i for i in items if i.code == "mow"]
     assert mows[0].date == "2026-10-08"  # the 7th is wet, so the day after
-    assert mows[0].params["height_mm"] == 75
+    # And a day later is a day more leaf: cutting to 75 mm on the 8th would take more than
+    # the third the rule allows, so the deck goes up a notch instead. It comes back down as
+    # the lawn comes back onto its interval.
+    assert mows[0].params["height_mm"] == 80
 
 
 def test_what_the_rules_advise_today_lands_on_today() -> None:
@@ -338,3 +341,31 @@ def test_the_seedbed_line_says_how_long_to_run_for() -> None:
         if i.code == "germination_watering"
     )
     assert "minutes" not in silent.params
+
+
+def test_the_week_walks_a_scalped_lawn_back_up_instead_of_stamping_one_height() -> None:
+    """The calendar used to name the height the lawn is going to, not the one to set today.
+
+    A sward taken to 20 mm before seed is climbing back to 75, and each cut of the week is
+    the one the next is measured from. Showing 75 on every row asks for a cut that takes
+    nothing off, and hides that the climb is made in steps at all.
+    """
+    ctx = _ctx(today=TODAY, last_mow_height_mm=20, days_since_mowing=4)
+    items = agenda.build(ctx, _forecast(), rules.evaluate(ctx), latitude=45.0, minutes_per_mm=4.0)
+    heights = [i.params["height_mm"] for i in items if i.code == "mow"]
+    assert heights, "a lawn climbing back is still a lawn that gets cut"
+    assert heights == sorted(heights), "the deck goes up as the leaf grows into it"
+    assert heights[0] == 30, "half again the 20 mm it was cut to, not the 75 it wants"
+    assert max(heights) <= 75, "and never past the height the species and the mower agree on"
+
+
+def test_a_cut_inside_the_germination_fortnight_says_it_is_not_the_robots() -> None:
+    """The week has to carry the hold, or a row inside the fortnight reads as a robot day."""
+    ctx = _ctx(today=TODAY, days_since_sowing=5, days_since_mowing=4, robot_mower=True)
+    items = agenda.build(ctx, _forecast(), rules.evaluate(ctx), latitude=45.0, minutes_per_mm=4.0)
+    mows = [i for i in items if i.code == "mow"]
+    assert mows, "an overseeded lawn is still cut"
+    held = [i for i in mows if i.date < "2026-10-10"]  # within 14 days of the sowing
+    assert held, "the fortnight covers part of this week"
+    for item in held:
+        assert "robot_wheels_tear_seedlings" in item.reasons

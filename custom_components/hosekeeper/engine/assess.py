@@ -41,6 +41,8 @@ class Lawn:
     """Whether the lawn is cut by a robot, which mows little and often."""
     robot_cadence: str = programme.DEFAULT_ROBOT_CADENCE
     """How often that robot is wanted out."""
+    hand_mower: bool = True
+    """Whether there is a push mower as well, for the cuts a robot must not make."""
     deck_mm: tuple[int, int] | None = None
     """Lowest and highest the mower can be set to, when that is known."""
 
@@ -464,6 +466,7 @@ def assess(
         deciduous_trees=lawn.deciduous_trees,
         robot_mower=lawn.robot_mower,
         robot_cadence=lawn.robot_cadence,
+        hand_mower=lawn.hand_mower,
         month_events=events.get(key[:7], set()),
         done_today={item.get("type") for item in record.get("maintenance", []) if item.get("type")},
         disease_risk_yesterday=set(

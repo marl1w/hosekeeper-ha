@@ -38,6 +38,7 @@ from .const import (
     CONF_FEATURES,
     CONF_FLOW_L_MIN,
     CONF_GRASS_TYPE,
+    CONF_HAND_MOWER,
     CONF_HUMIDITY_SENSOR,
     CONF_IRRIGATION_TYPE,
     CONF_LOCATION,
@@ -222,6 +223,12 @@ def _sources_schema(defaults: dict[str, Any]) -> vol.Schema:
             CONF_ROBOT_CADENCE, default=defaults.get(CONF_ROBOT_CADENCE, ROBOT_CADENCES[1])
         )
     ] = _select(ROBOT_CADENCES, CONF_ROBOT_CADENCE)
+    # And whether there is anything else to cut with. A robot must stay off new seed for a
+    # fortnight, and what to do instead depends entirely on this answer: get the push mower
+    # out, or send the robot over once, high, and dock it again.
+    schema[vol.Optional(CONF_HAND_MOWER, default=defaults.get(CONF_HAND_MOWER, True))] = (
+        selector.BooleanSelector()
+    )
     # What the mower can actually be set to. Without it the advice is the species' ideal,
     # which on a robot with a low deck is a height the machine has no setting for.
     for key in (CONF_DECK_MIN_MM, CONF_DECK_MAX_MM):

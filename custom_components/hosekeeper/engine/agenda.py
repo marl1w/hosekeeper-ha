@@ -338,13 +338,15 @@ def build(
     # made by hand and takes a push mower's interval. The month's line says the same, so the
     # two must be decided the same way or the calendar contradicts the banner above it.
     by_hand = rules.robot_held(ctx)
-    # The same height the day's advice names, so the calendar cannot ask for another one --
-    # and with it the interval, because a lawn cut low comes round sooner than one cut high.
-    height = rules.mowing_height(ctx)
+    # The same cut the day's advice names, from the same place, so the calendar cannot ask
+    # for another one -- and with it the interval, because a lawn cut low comes round sooner
+    # than one cut high. It used to name the height the lawn is going to eventually, which
+    # on a sward scalped to 20 mm before seed is 40 mm above where the leaf is standing.
+    cut = rules.mowing_plan(ctx)
     interval = (
-        programme.robot_pass_days(ctx.phase, height, ctx.robot_cadence)
+        programme.robot_pass_days(ctx.phase, cut.due_height_mm, ctx.robot_cadence)
         if ctx.robot_mower and not by_hand
-        else programme.mow_interval_days(ctx.phase, height)
+        else cut.interval_days
     )
     mow_days: list[dt.date] = []
     # Heat is in the interval already -- the summer phase grows slowly, so the third rule
@@ -354,23 +356,43 @@ def build(
     # falls due.
     if interval is not None and not rules.mower_held(ctx):
         since = ctx.days_since_mowing if ctx.days_since_mowing is not None else interval
+        last_cut = ctx.today - dt.timedelta(days=since)
+        kept = float(ctx.kept_height_mm)
         next_mow = ctx.today + dt.timedelta(days=max(0, interval - since))
+        # A lawn climbing back from a low cut is climbing across the week as well, and each
+        # cut it makes is the one the next is measured from: 20 mm becomes 42, then 60. So
+        # the week is walked rather than stamped with one height, and a cut pushed off a wet
+        # day is set higher for the extra growth it has to take off.
         while next_mow <= horizon:
             fc = by_date.get(next_mow)
             # Shift off a wet day.
             if fc and fc.rain_mm and fc.rain_mm >= 5:
                 next_mow += dt.timedelta(days=1)
                 continue
+            grown = (next_mow - last_cut).days
+            step = rules.mowing_plan(ctx, days_since_mowing=grown, kept_mm=kept)
             mow_days.append(next_mow)
             items.append(
                 AgendaItem(
                     next_mow.isoformat(),
                     "mow",
                     "mowing",
-                    {"height_mm": height},
-                    ("interval_reached", "afternoon_grass_dry"),
+                    {"height_mm": step.height_mm},
+                    (
+                        "interval_reached",
+                        "afternoon_grass_dry",
+                        # While the seed is rooting the cut is still made, but not by the
+                        # machine: the week has to say so, or it reads as a robot day.
+                        *(
+                            ("robot_wheels_tear_seedlings",)
+                            if rules.robot_held(ctx, (next_mow - ctx.today).days)
+                            else ()
+                        ),
+                    ),
                 )
             )
+            last_cut = next_mow
+            kept = step.height_mm
             next_mow += dt.timedelta(days=interval)
 
     # --- the month's operations: the best day this week ------------------------------------

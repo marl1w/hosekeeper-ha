@@ -147,6 +147,71 @@ def recovery_height(kept_mm: float, target_mm: int) -> int:
     return min(target_mm, round(kept_mm * RAISE_FACTOR))
 
 
+def standing_height(kept_mm: float, phase: str, days_since_mowing: int | None) -> float:
+    """Return about how tall the leaf is standing now, given when it was last cut.
+
+    Nothing measures the grass, so the only honest estimate is where it was put and what the
+    season has added since. It is what the third rule has to be read against: the rule is
+    about the leaf that is there today, not about the height the deck was set to a week ago.
+    """
+    growth = GROWTH_MM_DAY.get(phase)
+    if not growth or not days_since_mowing:
+        return kept_mm
+    return kept_mm + growth * days_since_mowing
+
+
+def third_rule_floor(standing_mm: float) -> int:
+    """Return the lowest a cut can be set to without taking more than a third of the leaf."""
+    return round(standing_mm * (2.0 / 3.0))
+
+
+# A deck is set in notches, not in millimetres. "Cut at 79 mm" is arithmetic read out loud:
+# nobody can set it, and the person reading it has to round it themselves, which is the one
+# part of the advice the engine should not be handing back. Five millimetres is about the
+# step a mower gives, and rounding up rather than down keeps the third rule intact -- a
+# height rounded down takes more leaf than the rule allows, which is what it is there for.
+MOW_HEIGHT_STEP_MM = 5
+
+
+def to_deck_step(height_mm: float) -> int:
+    """Return the height rounded up to a notch a mower can actually be set to."""
+    step = MOW_HEIGHT_STEP_MM
+    return int(-(-round(height_mm) // step) * step)
+
+
+def next_cut_height(
+    kept_mm: float,
+    target_mm: int,
+    phase: str,
+    days_since_mowing: int | None,
+    deck_max_mm: int | None = None,
+) -> int:
+    """Return the height to set for the next cut on a lawn climbing back from a low one.
+
+    Half again the last cut is where the lawn is going; the third rule is what it is allowed
+    to do today, and the two are not the same number once a recovery cut has been missed. A
+    sward taken to 20 mm and left a week is standing at 60 by then, and "half again the last
+    cut" still says 30 -- which is not a step back up, it is the scalp the rule exists to
+    prevent, taken on grass that is also carrying new seed. So the climb sets the floor and
+    the leaf standing there sets the floor under that, and the higher of the two wins.
+
+    It may come out above the target: grass that has run away is brought down in stages, and
+    a cut that cannot be made without breaking the rule is not made. What it cannot come out
+    above is the deck, because a height the mower has no setting for is not advice.
+    """
+    climb = min(target_mm, round(kept_mm * RAISE_FACTOR))
+    floor = third_rule_floor(standing_height(kept_mm, phase, days_since_mowing))
+    height = max(climb, floor)
+    # The target is a height the mower is known to reach, so it is left exactly as it is.
+    # Every other number here is arithmetic -- two thirds of an estimated leaf, half again a
+    # recorded cut -- and goes on a notch before it is read out as an instruction.
+    if height != target_mm:
+        height = to_deck_step(height)
+    if deck_max_mm is not None:
+        height = min(height, deck_max_mm)
+    return int(height)
+
+
 def cutting_height(range_mm: tuple[int, int], *, taller: bool = False, lower: bool = False) -> int:
     """Return the height to cut to, within what the species and the mower allow.
 

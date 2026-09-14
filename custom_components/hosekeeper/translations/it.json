@@ -47,14 +47,16 @@
           "mower_entity": "Robot rasaerba",
           "deck_min_mm": "Altezza di taglio minima",
           "deck_max_mm": "Altezza di taglio massima",
-          "robot_cadence": "Frequenza dei passaggi del robot"
+          "robot_cadence": "Frequenza dei passaggi del robot",
+          "hand_mower": "C'è anche un rasaerba a spinta"
         },
         "data_description": {
           "rain_sensor": "Un totale giornaliero che si azzera a mezzanotte oppure un totale progressivo: vanno bene entrambi.",
           "solar_sensor": "Insieme a umidità e vento permette di calcolare l'evapotraspirazione con il metodo completo FAO-56 Penman-Monteith.",
           "mower_entity": "Ogni ciclo di lavoro del robot viene registrato come un taglio.",
           "deck_min_mm": "Facoltative, ma vanno indicate entrambe: l'escursione del piatto o della regolazione del rasaerba. I consigli restano dentro questo intervallo, così a un robot che arriva a 60 mm non viene mai chiesto un taglio a 75.",
-          "robot_cadence": "Ogni passaggio tiene il prato occupato e ripassa sempre le stesse tracce: una frequenza più bassa lo lascia tranquillo tra un taglio e l'altro. Ignorata se non c'è un robot."
+          "robot_cadence": "Ogni passaggio tiene il prato occupato e ripassa sempre le stesse tracce: una frequenza più bassa lo lascia tranquillo tra un taglio e l'altro. Ignorata se non c'è un robot.",
+          "hand_mower": "Dopo una semina il robot deve stare fermo due settimane, ma il taglio va fatto lo stesso. Con un rasaerba a spinta il consiglio è di usarlo; senza, di far passare il robot una volta sola, alto, e rimetterlo in base. Ignorata se non c'è un robot."
         }
       }
     },
@@ -229,6 +231,7 @@
           "raise_height_after_low_cut": "Rialza l'altezza di taglio",
           "hold_mowing_after_sowing": "Tieni fermo il rasaerba",
           "mow_by_hand_while_seed_roots": "Taglia a mano",
+          "mow_one_robot_pass_while_seed_roots": "Un solo passaggio del robot, poi in base",
           "feed_recently_done": "Concimato di recente",
           "feed_wait": "Attendi per concimare",
           "feed_now": "Concima ora",

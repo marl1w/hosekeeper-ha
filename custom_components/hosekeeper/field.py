@@ -18,6 +18,7 @@ from .const import (
     CONF_FEATURES,
     CONF_FLOW_L_MIN,
     CONF_GRASS_TYPE,
+    CONF_HAND_MOWER,
     CONF_HUMIDITY_SENSOR,
     CONF_IRRIGATION_TYPE,
     CONF_LOCATION,
@@ -78,6 +79,7 @@ class FieldConfig:
     soil_moisture_sensor: str | None
     mower_entity: str | None
     robot_cadence: str = "balanced"
+    hand_mower: bool = True
     deck_min_mm: int | None = None
     deck_max_mm: int | None = None
     features: tuple[Feature, ...] = ()
@@ -121,6 +123,9 @@ class FieldConfig:
             soil_moisture_sensor=data.get(CONF_SOIL_MOISTURE_SENSOR) or None,
             mower_entity=data.get(CONF_MOWER_ENTITY) or None,
             robot_cadence=data.get(CONF_ROBOT_CADENCE) or "balanced",
+            # Assumed until said otherwise: most lawns have something that can be pushed
+            # over them, and the advice that depends on it is a fortnight a year.
+            hand_mower=bool(data.get(CONF_HAND_MOWER, True)),
             deck_min_mm=_optional_int(data.get(CONF_DECK_MIN_MM)),
             deck_max_mm=_optional_int(data.get(CONF_DECK_MAX_MM)),
             features=tuple(
