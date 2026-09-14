@@ -431,7 +431,7 @@ def with_syringe(
     watering, and it is not counted in the balance. So it can be added to a plan that has
     already been settled, as long as its hour has not gone by.
     """
-    if plan.syringe:
+    if plan.syringe or plan.seedbed_day:
         return plan
     start = dt.datetime.combine(plan.date, SYRINGE_TIME, tzinfo=tzinfo)
     minutes = round(SYRINGE_MM * minutes_per_mm) if minutes_per_mm else 3
@@ -441,6 +441,24 @@ def with_syringe(
         syringe_start=start,
         syringe_end=start + dt.timedelta(minutes=max(1, minutes)),
         reasons=(*plan.reasons, "midday_syringing_heat"),
+    )
+
+
+def without_syringe(plan: IrrigationPlan) -> IrrigationPlan:
+    """Return the plan with its midday syringing taken back out.
+
+    For a plan that should never have had one: a day whose passes are its whole watering
+    already crosses the afternoon, and a syringing on the same valve is the same water twice.
+    Only the hour that is still ahead can be taken back; one already run is a fact.
+    """
+    if not plan.syringe:
+        return plan
+    return replace(
+        plan,
+        syringe=False,
+        syringe_start=None,
+        syringe_end=None,
+        reasons=tuple(r for r in plan.reasons if r != "midday_syringing_heat"),
     )
 
 

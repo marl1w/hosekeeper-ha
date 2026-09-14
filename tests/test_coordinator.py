@@ -964,3 +964,90 @@ async def test_a_plan_made_before_the_sowing_is_reshaped_not_kept(
     plan = zone.coordinator.data.irrigation_plan
     assert "seedbed_day_replaces_dawn_cycle" in plan["reasons"], "the plan was not rebuilt"
     assert [run["start"][11:16] for run in plan["germination"]] == ["09:00", "13:00", "17:00"]
+
+
+@pytest.mark.usefixtures("weather_service", "station")
+async def test_a_seedbed_day_is_not_given_a_syringing_when_the_forecast_turns(
+    hass: HomeAssistant,
+    field_data: dict[str, Any],
+    forecast_days: list[dict[str, Any]],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Heat added to a settled plan must not put a syringing on a day that is all passes.
+
+    A seedbed's passes already cross the hottest part of the afternoon, which is why the day
+    is built without one. But the syringing a hot forecast adds to a plan already made was
+    asked for on the weather alone: a lawn sown all over was told to keep the seedbed damp
+    and to syringe at one, the same water twice on the same valve.
+    """
+    tomorrow = dt_util.now().date() + dt.timedelta(days=1)
+    for day in forecast_days:
+        if day["datetime"].startswith(tomorrow.isoformat()):
+            day["temperature"] = 24.0
+    entry = await _setup(hass, field_data)
+    zone = only_zone(entry)
+    await hass.services.async_call(
+        DOMAIN,
+        "log_sowing",
+        {"zone_id": zone.zone_id, "kind": "overseed"},
+        blocking=True,
+    )
+    zone.diary.today().pop("irrigation_plan", None)
+    await zone.coordinator.async_refresh()
+    await _settle(hass, freezer)
+    stored = zone.diary.today()["irrigation_plan"]
+    assert schedule.IrrigationPlan.from_dict(stored).seedbed_day
+    assert stored["syringe"] is False, "the day was already syringed, so nothing is tested"
+
+    # And then the forecast turns hot on a day whose watering is already settled.
+    for day in forecast_days:
+        if day["datetime"].startswith(tomorrow.isoformat()):
+            day["temperature"] = 34.0
+    await zone.coordinator.async_refresh()
+    await _settle(hass, freezer)
+
+    plan = zone.coordinator.data.irrigation_plan
+    assert plan.get("germination"), "the passes went missing"
+    assert plan["syringe"] is False, "a seedbed day was given a midday syringing as well"
+    assert "midday_syringing_heat" not in plan["reasons"]
+
+
+@pytest.mark.usefixtures("weather_service", "station")
+async def test_a_syringing_a_seedbed_day_should_never_have_had_goes_back_out(
+    hass: HomeAssistant,
+    field_data: dict[str, Any],
+    forecast_days: list[dict[str, Any]],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A plan stored carrying both is healed on the next refresh, not left until tomorrow."""
+    tomorrow = dt_util.now().date() + dt.timedelta(days=1)
+    for day in forecast_days:
+        if day["datetime"].startswith(tomorrow.isoformat()):
+            day["temperature"] = 34.0
+    entry = await _setup(hass, field_data)
+    zone = only_zone(entry)
+    await hass.services.async_call(
+        DOMAIN,
+        "log_sowing",
+        {"zone_id": zone.zone_id, "kind": "overseed"},
+        blocking=True,
+    )
+    zone.diary.today().pop("irrigation_plan", None)
+    await zone.coordinator.async_refresh()
+    await _settle(hass, freezer)
+    # A plan of the shape the old path left behind: a seedbed day with a syringing on it.
+    stored = dict(zone.diary.today()["irrigation_plan"])
+    stored["syringe"] = True
+    stored["syringe_start"] = f"{tomorrow.isoformat()}T13:00:00+00:00"
+    stored["syringe_end"] = f"{tomorrow.isoformat()}T13:03:00+00:00"
+    stored["reasons"] = [*stored["reasons"], "midday_syringing_heat"]
+    zone.diary.today()["irrigation_plan"] = stored
+
+    await zone.coordinator.async_refresh()
+    await _settle(hass, freezer)
+
+    plan = zone.coordinator.data.irrigation_plan
+    assert plan["syringe"] is False, "the stale syringing was kept"
+    assert plan["syringe_start"] is None
+    assert "midday_syringing_heat" not in plan["reasons"]
+    assert plan.get("germination"), "and the passes it should keep went with it"

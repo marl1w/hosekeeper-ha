@@ -380,6 +380,10 @@ the same for the panel's event merging, which the tests had also been re-impleme
   the other was the question itself. The wait now runs from the seed, six weeks, and sod
   waits only to root, so "diserbo foglia larga" is back in October 2026 and May 2027, which
   is what the professional calendar says |
+| "Midday syringing" and "keep the seedbed damp" on the same day | the day is built without a
+  syringing when the passes are its whole watering, but the syringing a hot forecast adds to a
+  plan already settled was asked for on the weather alone. It now asks the plan what kind of
+  day it is, and one already stored with both goes back out while its hour is still ahead |
 
 ## Done in phase 4, after the first screenshots
 

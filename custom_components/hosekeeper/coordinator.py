@@ -799,8 +799,23 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             # Heat does not always announce itself in time. The watering is decided once and
             # kept, so its depth cannot wobble; a syringing is a millimetre and a half that
             # never enters the balance, so it may still be added to a plan already made.
-            if self._wants_syringe(result, forecast, target_date) and not current.syringe:
+            # Not to a seedbed day, though: its passes already cross the hottest part of the
+            # afternoon, and a syringing on the same valve would only be the same water
+            # twice -- the same rule the plan is built under when the day starts as one.
+            if (
+                not current.seedbed_day
+                and self._wants_syringe(result, forecast, target_date)
+                and not current.syringe
+            ):
                 current = schedule.with_syringe(current, sunrise.tzinfo, minutes_per_mm)
+            # And one a plan is already carrying from before that rule goes back out, as long
+            # as its hour is still ahead: a syringing already run is a fact, not a plan.
+            elif (
+                current.seedbed_day
+                and current.syringe
+                and (current.syringe_start is None or now < current.syringe_start)
+            ):
+                current = schedule.without_syringe(current)
             # Seed goes down on a day whose watering was decided that morning. The passes
             # that keep a seedbed damp are surface water and never enter the balance, so the
             # settled plan can gain them rather than leaving the seed dry until tomorrow.

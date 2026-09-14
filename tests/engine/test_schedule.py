@@ -288,3 +288,43 @@ def test_the_seedbed_a_settled_plan_gains_is_the_regime_the_day_is_on() -> None:
     # And the watering that was decided this morning is still exactly the one decided.
     assert sown.cycles == settled.cycles
     assert sown.main_mm == settled.main_mm
+
+
+def test_a_seedbed_day_refuses_the_syringing_a_hot_forecast_offers_it() -> None:
+    """The passes already cross the afternoon; a syringing would be the same water twice."""
+    seedbed = schedule.irrigation_plan(
+        date=dt.date(2026, 9, 7),
+        sunrise=SUNRISE,
+        needed_mm=10.0,
+        minutes_per_mm=4.0,
+        heat_stress=False,
+        forecast_tmax=24.0,
+        dormant=False,
+        soil_type="loam",
+        germinating=True,
+        seedbed_whole_zone=True,
+        seedbed_depths=[programme.STANDARD_SEEDBED.mm] * programme.STANDARD_SEEDBED.passes,
+    )
+    assert seedbed.seedbed_day and not seedbed.syringe
+    assert schedule.with_syringe(seedbed, TZ, 4.0) is seedbed
+
+
+def test_a_syringing_can_be_taken_back_off_a_plan_that_should_not_have_one() -> None:
+    """A day that has become a seedbed keeps its passes and loses the midday run."""
+    hot = schedule.irrigation_plan(
+        date=dt.date(2026, 9, 7),
+        sunrise=SUNRISE,
+        needed_mm=10.0,
+        minutes_per_mm=4.0,
+        heat_stress=True,
+        forecast_tmax=34.0,
+        dormant=False,
+        soil_type="loam",
+    )
+    assert hot.syringe
+    cooled = schedule.without_syringe(hot)
+    assert cooled.syringe is False
+    assert cooled.syringe_start is None and cooled.syringe_end is None
+    assert "midday_syringing_heat" not in cooled.reasons
+    # Everything else the day was told to do is untouched.
+    assert cooled.cycles == hot.cycles
