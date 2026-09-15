@@ -1051,3 +1051,33 @@ async def test_a_syringing_a_seedbed_day_should_never_have_had_goes_back_out(
     assert plan["syringe_start"] is None
     assert "midday_syringing_heat" not in plan["reasons"]
     assert plan.get("germination"), "and the passes it should keep went with it"
+
+
+@pytest.mark.usefixtures("weather_service", "station")
+async def test_the_day_keeps_the_lines_it_carried(
+    hass: HomeAssistant, field_data: dict[str, Any]
+) -> None:
+    """Today's agenda is written onto today's page, so tomorrow can still tick it off.
+
+    The agenda is rebuilt from scratch at every refresh and only ever looks forward. Without
+    this the lines a day asked for stop existing at midnight, and a job done in the afternoon
+    and written down the next morning has nothing left to write down against.
+    """
+    entry = await _setup(hass, field_data)
+    zone = only_zone(entry)
+    today = zone.diary.today_key()
+
+    asked = zone.diary.today()["asked"]
+    assert asked, "the day kept none of its own lines"
+    assert {item["date"] for item in asked} == {today}, "a day may only keep its own"
+    # The same lines the panel is being shown, so yesterday's page and today's cannot
+    # describe the day differently.
+    agenda_today = [item for item in zone.coordinator.data.agenda if item["date"] == today]
+    assert asked == agenda_today
+
+    # And no further back than the day that can still use them: the diary is rewritten whole
+    # on every save, so a season of dead tick boxes is a season of pages carrying them.
+    stale = zone.diary.day("2026-01-05")
+    stale["asked"] = [{"date": "2026-01-05", "code": "mow", "category": "mowing", "params": {}}]
+    await zone.coordinator.async_refresh()
+    assert "asked" not in stale

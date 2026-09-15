@@ -10,6 +10,8 @@
  * way: a test that merges by its own rules tests its own rules.
  */
 
+import { confirmable } from "./views/confirm.js";
+
 export const CATEGORY_ORDER = [
   "irrigation",
   "mowing",
@@ -20,6 +22,40 @@ export const CATEGORY_ORDER = [
   "aeration",
   "general",
 ];
+
+/**
+ * Yesterday's lines, minus the ones there is nothing left to say about.
+ *
+ * The day keeps every line it carried, because the coordinator writing them has no idea
+ * which of them anybody will want back. Two kinds are dropped on the way in. A line that is
+ * not a job — an alert, a standing routine — cannot be confirmed, so offering it yesterday
+ * would be offering a tick box that does nothing. And a line the day already records was
+ * done and written down: the diary's own entry is beside it, and a second row asking for the
+ * same cut reads as the engine not having noticed.
+ *
+ * Both tests come from `confirmable`, which is where confirming is defined. A copy of that
+ * list here would be a copy to keep in step, and the one it drifted from would be the one
+ * deciding what the reader sees.
+ */
+function stillOpen(event, recorded) {
+  if (event.kind !== "unrecorded") return true;
+  const payload = confirmable(event);
+  if (!payload) return false;
+  return !recorded.has(payload.what === "irrigation" ? "irrigation" : payload.kind);
+}
+
+/** The diary's names for the work one lawn recorded on each day. */
+function recordedByDay(snapshot) {
+  const out = new Map();
+  for (const event of snapshot.events || []) {
+    if (event.kind !== "logged") continue;
+    if (!out.has(event.date)) out.set(event.date, new Set());
+    // A watering is kept as the day's total rather than as a job, so it comes back under a
+    // name of its own; everything else is filed under the diary kind it was written as.
+    out.get(event.date).add(event.code === "irrigation_done" ? "irrigation" : event.code);
+  }
+  return out;
+}
 
 function signature(event) {
   const params = event.params || {};
@@ -39,7 +75,11 @@ function signature(event) {
 export function mergeEvents(snapshots) {
   const byDay = new Map();
   for (const snapshot of snapshots) {
+    const recorded = recordedByDay(snapshot);
     for (const event of snapshot.events || []) {
+      // Per lawn, before anything is merged: one lawn's cut being written down says nothing
+      // about the lawn next to it, and after merging there is no telling the two apart.
+      if (!stillOpen(event, recorded.get(event.date) || new Set())) continue;
       if (!byDay.has(event.date)) byDay.set(event.date, new Map());
       const bucket = byDay.get(event.date);
       const key = signature(event);

@@ -48,6 +48,12 @@ class DayRecord(TypedDict, total=False):
     deficit_mm: float
     disease_flags: list[str]
     irrigation_plan: dict[str, Any]
+    asked: list[dict[str, Any]]
+    """The agenda lines this day carried, kept so the day after can still tick them off.
+
+    Written by the coordinator and pruned by it: today's page and yesterday's hold them,
+    every older page has them dropped.
+    """
     obs: dict[str, Any]
     """Intraday accumulators owned by the coordinator: running extremes, means, integrals."""
 

@@ -80,10 +80,14 @@ export function eventDetail(event, lang, locale, snapshot) {
  * A job done three times in a day is three hours, not the six-hour span between the first
  * and the last: "11:00–17:00" for three two-minute waterings says the sprinkler runs all
  * afternoon, which is the opposite of what is being asked for.
+ *
+ * One hour is the same job done once -- rain has taken the other passes off the day -- and
+ * it is written the same way. The span form would draw it from the hour to itself,
+ * "17:00–17:00", which reads as a bug rather than as a single watering.
  */
 export function eventTime(event, locale) {
   const at = event.params?.at;
-  if (at?.length > 1) return at.join(" · ");
+  if (at?.length) return at.join(" · ");
   if (event.all_day || !event.start) return "";
   return event.end ? `${fmtTime(event.start, locale)}–${fmtTime(event.end, locale)}` : fmtTime(event.start, locale);
 }

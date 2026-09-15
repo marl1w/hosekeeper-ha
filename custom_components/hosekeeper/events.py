@@ -270,6 +270,9 @@ def build(
                     **zone,
                 }
             )
+        if date == today - dt.timedelta(days=1):
+            # ...and what it asked for and nobody wrote down, which is still confirmable.
+            out.extend(_yesterdays_lines(zone_id, key, record, zone))
 
     if state is None:
         return out
@@ -421,6 +424,53 @@ def build(
             }
         )
     return sorted(out, key=lambda e: (e["date"], e["start"] or ""))
+
+
+def _yesterdays_lines(
+    zone_id: str, key: str, record: dict[str, Any], zone: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Return what yesterday asked for, as lines that can still be ticked off.
+
+    A job is done in the afternoon and written down in the evening, and sometimes the evening
+    is the next morning. The agenda only ever looks forward, so at midnight the line that
+    asked for it is gone and there is nothing left to confirm: the lawn was watered, the
+    diary says it was not, and the engine goes on advising from the second of those.
+
+    So the day keeps its own lines -- the coordinator writes them onto the day's page as it
+    goes -- and the day after offers them back. One day and no further. Two days on nobody
+    remembers whether it was Tuesday or Wednesday they mowed on, and a calendar of unticked
+    boxes going back a fortnight is a reproach rather than a diary; work older than that is
+    entered through Tracking, which asks for the date.
+
+    Whether a line is still worth offering -- whether it is a job at all, and whether the day
+    already records it -- is the panel's decision, because the panel is where confirming is
+    defined and a second copy of that list here would be a second copy to keep in step.
+    """
+    out: list[dict[str, Any]] = []
+    for index, item in enumerate(record.get("asked", [])):
+        params = dict(item.get("params") or {})
+        # The regime's hours, under the name the panel reads them by, so a seedbed line
+        # reads "09:00 · 13:00 · 17:00" on yesterday's page exactly as it did on its own.
+        hours = params.pop("hours", None)
+        if hours:
+            params["at"] = list(hours)
+        out.append(
+            {
+                "uid": f"{zone_id}:{key}:asked{index}",
+                "date": key,
+                "start": None,
+                "end": None,
+                # The hour it was asked for is in `at`; the job itself belongs to the day.
+                "all_day": True,
+                "code": item["code"] if item["code"] != "operation" else params["operation"],
+                "category": item["category"],
+                "kind": "unrecorded",
+                "params": params,
+                "reasons": item.get("reasons", []),
+                **zone,
+            }
+        )
+    return out
 
 
 def _cycle_event(

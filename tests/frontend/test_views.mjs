@@ -1038,5 +1038,102 @@ if (!Panel) {
   }
 }
 
+// --- a day left with one seedbed pass says one hour, not an hour to itself ---------------
+//
+// Rain takes passes off a sown day and the last hour is the one that survives. Written as a
+// span it comes out "17:00–17:00", which reads as a broken window rather than as the single
+// watering it is.
+{
+  const { eventTime } = await import(join(front, "views", "events.js"));
+  const day = "2026-09-16";
+  const one = eventTime(
+    { start: `${day}T17:00:00`, end: `${day}T17:00:00`, params: { at: ["17:00"] } },
+    "it-IT",
+  );
+  if (one !== "17:00") {
+    console.error(`  a single seedbed pass reads "${one}"`);
+    failed = 1;
+  }
+  const three = eventTime(
+    { start: `${day}T09:00:00`, end: `${day}T17:00:00`, params: { at: ["09:00", "13:00", "17:00"] } },
+    "it-IT",
+  );
+  if (three !== "09:00 · 13:00 · 17:00") {
+    console.error(`  three passes read "${three}"`);
+    failed = 1;
+  }
+}
+
+// --- yesterday's line can still be ticked off, and lands on yesterday ----------------------
+//
+// A job is done in the afternoon and written down in the evening, and sometimes the evening
+// is the next morning. The line comes back for one day, and the confirmation it sends has to
+// carry the day it happened: without that the watering lands on today's page and the engine
+// reads a lawn watered twice, once on a day it was not.
+{
+  const { confirmButton } = await import(join(front, "views", "confirm.js"));
+  const { mergeEvents } = await import(join(front, "merge.js"));
+  const day = "2026-09-06";
+  const before = "2026-09-05";
+  const line = (date, extra = {}) => ({
+    date,
+    zone_id: "north",
+    code: "germination_watering",
+    category: "irrigation",
+    kind: "unrecorded",
+    params: { times: 3, mm: 2, at: ["09:00", "13:00", "17:00"] },
+    ...extra,
+  });
+
+  let sent = null;
+  const press = (event) => {
+    sent = null;
+    const button = confirmButton(event, { lang: "it", todayIso: day, onConfirm: (_e, write) => { sent = write; } });
+    if (button) button.click();
+    return button;
+  };
+
+  if (!press(line(before))) {
+    console.error("  yesterday's line has no Done button");
+    failed = 1;
+  } else if (sent?.kind !== "seedbed_watering" || sent?.at !== `${before}T17:00:00`) {
+    console.error(`  yesterday's confirmation is written as ${JSON.stringify(sent)}`);
+    failed = 1;
+  }
+  // The day before and no further: last Tuesday is not a day anybody can still place a cut on.
+  if (press(line("2026-09-04"))) {
+    console.error("  a line two days old is still offered");
+    failed = 1;
+  }
+  // Today's rows carry no hour at all: the diary stamps them as it writes them.
+  press(line(day, { kind: "projected" }));
+  if (sent?.at !== undefined) {
+    console.error(`  today's confirmation was back-dated to ${sent?.at}`);
+    failed = 1;
+  }
+
+  // And the line goes when the day already records the work -- per lawn, because one lawn's
+  // watering being written down says nothing about the lawn beside it.
+  const logged = { date: before, zone_id: "north", code: "seedbed_watering", category: "irrigation", kind: "logged", params: {} };
+  const kept = mergeEvents([{ zone_id: "north", events: [line(before)] }]).get(before) || [];
+  const dropped = mergeEvents([{ zone_id: "north", events: [line(before), logged] }]).get(before) || [];
+  if (kept.length !== 1) {
+    console.error(`  an unrecorded line nobody wrote down was dropped (${kept.length} left)`);
+    failed = 1;
+  }
+  if (dropped.some((e) => e.kind === "unrecorded")) {
+    console.error("  a line the day already records is offered again");
+    failed = 1;
+  }
+  // A standing routine is not a job you tick: it has no confirmation to make.
+  const routine = mergeEvents([
+    { zone_id: "north", events: [line(before, { code: "mow_routine", category: "mowing", params: {} })] },
+  ]).get(before);
+  if (routine) {
+    console.error("  a month-long routine came back as something to tick off");
+    failed = 1;
+  }
+}
+
 if (!failed) console.log("  every view renders, the panel wires them, and the phone layout wins");
 process.exit(failed);

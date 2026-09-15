@@ -21,7 +21,7 @@
  */
 
 import { el, icon } from "../dom.js";
-import { todayKey } from "../format.js";
+import { dayBefore, todayKey } from "../format.js";
 import { strings } from "../i18n.js";
 
 /**
@@ -110,19 +110,44 @@ export function confirmable(event) {
 }
 
 /**
+ * The hour to write a confirmation under.
+ *
+ * Today's rows are confirmed as they are read, so they carry no hour and the diary stamps
+ * them now. Yesterday's cannot: without a date the entry would land on today's page, and the
+ * engine would count a watering that happened yesterday as today's -- which is the same
+ * mistake as not recording it, told the other way round.
+ *
+ * The hour the job was asked for is the closest thing to when it was done: the last of a
+ * seedbed's passes, five in the afternoon. A job asked for on no particular hour gets noon,
+ * which cannot fall off either end of the day whatever the reader's clock is set to.
+ */
+function happenedAt(event, today) {
+  if (event.date === today) return undefined;
+  const hours = event.params?.at;
+  const hour = (Array.isArray(hours) ? hours[hours.length - 1] : null) || event.start?.slice(11, 16) || "12:00";
+  return `${event.date}T${hour}:00`;
+}
+
+/**
  * The button, or nothing at all.
  *
  * Nothing for an event that records nothing, and nothing for a day that has not happened:
  * there is no confirming next month's feed in September. Yesterday still gets one, because
- * a job done and not written down is the common case the diary exists for.
+ * a job done and not written down is the common case the diary exists for, and the line it
+ * was asked on is kept one day for exactly that. Nothing older: the day before is a thing
+ * anybody can still remember doing, last Tuesday is not, and work further back is entered
+ * through Tracking, which asks which day it was.
  */
 export function confirmButton(event, { lang, onConfirm, compact = false, todayIso }) {
   if (!onConfirm) return null;
-  if (event.date > (todayIso || todayKey())) return null;
+  const today = todayIso || todayKey();
+  if (event.date > today || event.date < dayBefore(today)) return null;
   const payload = confirmable(event);
   if (!payload) return null;
   const s = strings(lang);
-  const { asks: _asks, ...write } = payload;
+  const { asks: _asks, ...payloadWrite } = payload;
+  const at = happenedAt(event, today);
+  const write = at ? { ...payloadWrite, at } : payloadWrite;
   return el(
     "button",
     {

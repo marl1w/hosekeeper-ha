@@ -556,6 +556,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .event--noted .event__title { font-weight: 500; }
 .badge--projected { border-color: transparent; background: color-mix(in srgb, var(--hk-accent) 16%, transparent); color: color-mix(in srgb, var(--hk-accent) 85%, var(--hk-text)); }
 .badge--alert { border-color: transparent; background: color-mix(in srgb, var(--hk-error) 16%, transparent); color: color-mix(in srgb, var(--hk-error) 85%, var(--hk-text)); }
+.badge--unrecorded { border-color: var(--hk-line); color: var(--hk-text-dim); }
+/* Yesterday, still open: dashed like a plan rather than solid like a fact, because that is
+   what it is -- the day asked for it and nothing says yet whether it happened. */
+.pill--unrecorded { background: transparent; border: 1px dashed color-mix(in srgb, var(--pill-tone, var(--hk-tone-general)) 60%, transparent); }
+.event--unrecorded .event__title { font-weight: 500; }
 .trend { display: flex; flex-direction: column; gap: 14px; }
 
 /* Diary rows */

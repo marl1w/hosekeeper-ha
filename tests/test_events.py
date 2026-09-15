@@ -116,3 +116,79 @@ def test_a_zone_behind_another_waters_its_seedbed_later() -> None:
     assert first["params"]["at"] == ["09:00", "13:00", "17:00"]
     assert second["params"]["at"] == ["09:07", "13:07", "17:07"]
     assert second["start"] > first["start"]
+
+
+def _diary(pages: dict[dt.date, dict[str, Any]]):
+    """Return a diary whose days are the ones given, as `build` reads them."""
+    return SimpleNamespace(
+        recent=lambda count, until=TODAY: [
+            (until - dt.timedelta(days=offset), pages.get(until - dt.timedelta(days=offset), {}))
+            for offset in range(count - 1, -1, -1)
+        ]
+    )
+
+
+def _asked(code: str = "germination_watering", **params: Any) -> dict[str, Any]:
+    return {
+        "date": (TODAY - dt.timedelta(days=1)).isoformat(),
+        "code": code,
+        "category": "irrigation",
+        "params": {"times": 3, "mm": 2, "hours": ["09:00", "13:00", "17:00"], **params},
+        "reasons": ["keep_the_seedbed_damp"],
+    }
+
+
+def test_yesterdays_lines_come_back_to_be_ticked_off() -> None:
+    """A job done yesterday and not written down still has the line that asked for it.
+
+    The agenda only looks forward, so at midnight yesterday's lines are gone and there is
+    nothing left to confirm. The day keeps its own, and the day after offers them back.
+    """
+    yesterday = TODAY - dt.timedelta(days=1)
+    found = [
+        e
+        for e in events.build(
+            SimpleNamespace(name="South lawn"),
+            "abc",
+            _diary({yesterday: {"asked": [_asked()]}}),
+            _state(),
+            TODAY,
+            dt.time(6, 55),
+            TZ,
+            "loam",
+        )
+        if e["kind"] == "unrecorded"
+    ]
+    assert len(found) == 1
+    assert found[0]["date"] == yesterday.isoformat()
+    assert found[0]["code"] == "germination_watering"
+    # The hours the passes were asked for, under the name the panel reads them by, so the
+    # line says "09:00 · 13:00 · 17:00" on yesterday's page exactly as it did on its own.
+    assert found[0]["params"]["at"] == ["09:00", "13:00", "17:00"]
+    assert "hours" not in found[0]["params"]
+    assert found[0]["reasons"] == ["keep_the_seedbed_damp"]
+
+
+def test_only_yesterday_is_offered_back() -> None:
+    """One day and no further.
+
+    Nobody remembers which Tuesday they mowed on, and a fortnight of unticked boxes is a
+    reproach rather than a diary. Older work is entered through Tracking, which asks for the
+    date; today's own lines are the agenda's, not the diary's copy of them.
+    """
+    pages = {TODAY - dt.timedelta(days=offset): {"asked": [_asked()]} for offset in (0, 2, 3, 9)}
+    found = [
+        e
+        for e in events.build(
+            SimpleNamespace(name="South lawn"),
+            "abc",
+            _diary(pages),
+            _state(),
+            TODAY,
+            dt.time(6, 55),
+            TZ,
+            "loam",
+        )
+        if e["kind"] == "unrecorded"
+    ]
+    assert found == []

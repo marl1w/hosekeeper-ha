@@ -620,6 +620,22 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             radiation_estimated=bool(obs.get("rs_used_estimate")),
             soil_moisture_pct=self._read_float(self.field.soil_moisture_sensor),
         )
+        # What today asked for, kept on the day itself.
+        #
+        # The agenda is recomputed from scratch at every refresh and only ever looks forward,
+        # so at midnight today's lines stop existing: a job done in the afternoon and not
+        # written down had nowhere left to be written down. The day's own page keeps them,
+        # rewritten each refresh so it ends the day holding the last word, and the calendar
+        # offers yesterday's back for confirmation. Only yesterday's: a fortnight of unticked
+        # boxes is a reproach, not a diary, and nobody remembers which Tuesday they mowed on.
+        today["asked"] = [item.as_dict() for item in result.agenda if item.date == today_key]
+        # And dropped from every day past offering them back. They are a fortnight's worth of
+        # tick boxes nobody will ever press, and the diary is rewritten whole on every save:
+        # a season of them is a season of pages carrying a plan for a day that is over.
+        keep_from = (now.date() - dt.timedelta(days=1)).isoformat()
+        for key, page in self.diary.days.items():
+            if key < keep_from:
+                page.pop("asked", None)
         self.diary.schedule_save()
 
         soil, deficit, needed_mm = result.soil, result.deficit_mm, result.needed_mm

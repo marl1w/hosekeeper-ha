@@ -457,6 +457,21 @@ def invent(
         "feed_factor": result.feed_factor,
     }
 
+    # What yesterday asked for, kept on yesterday's page.
+    #
+    # On a real box the coordinator writes these as the day goes, and the calendar offers
+    # them back the morning after so a job done and not written down can still be ticked.
+    # The preview has no yesterday to have written anything, so today's lines are re-dated:
+    # the same shape, one day back, which is what the panel would have found there.
+    yesterday = (today - dt.timedelta(days=1)).isoformat()
+    for record in days:
+        if record["date"] == yesterday:
+            record["asked"] = [
+                {**item, "date": yesterday}
+                for item in state["agenda"]
+                if item["date"] == today.isoformat()
+            ]
+
     shim_field = SimpleNamespace(name=name)
     shim_diary = SimpleNamespace(
         recent=lambda count, until=today: [
@@ -546,15 +561,18 @@ INDEX = """<!doctype html>
         // "logged today" exactly as it would on the box, and is gone on the next rebuild.
         const snapshot = snapshots[msg.zone_id];
         const today = new Date().toISOString().slice(0, 10);
+        // A confirmation carries the day it happened when that is not today: yesterday's
+        // lines are ticked off on yesterday's page, and the entry has to land there.
+        const day = (msg.at || "").slice(0, 10) || today;
         const kind = msg.what === "irrigation" ? "irrigation" : msg.kind || msg.what;
         if (msg.what === "status") {
           snapshot.state.status = msg.status;
         } else {
           snapshot.events = [
-            ...snapshot.events.filter((e) => !(e.date === today && e.kind === "logged" && e.code === kind)),
+            ...snapshot.events.filter((e) => !(e.date === day && e.kind === "logged" && e.code === kind)),
             {
-              uid: `${msg.zone_id}:${today}:preview:${kind}`,
-              date: today,
+              uid: `${msg.zone_id}:${day}:preview:${kind}`,
+              date: day,
               start: null,
               end: null,
               all_day: true,
