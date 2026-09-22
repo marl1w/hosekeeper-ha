@@ -137,14 +137,30 @@ def test_a_day_that_dries_faster_is_wetted_more_often() -> None:
     assert programme.CHITTED_SEEDBED.passes_for(1.0) == 5, "chitted seed keeps its floor"
 
 
-def test_more_passes_means_lighter_ones_but_never_too_light_to_wet_anything() -> None:
-    """The day's water divided further, down to the point a pass only damps the leaf."""
-    hot = programme.seedbed_passes(programme.STANDARD_SEEDBED, 6.0, 6.0, passes=6)
-    assert len(hot) == 6
-    assert all(mm >= programme.SEEDBED_MIN_PASS_MM for mm in hot)
-    assert sum(hot) <= 6.0 + 0.6, "the day's water, not six times the ordinary pass"
-    # A day that owes almost nothing gets fewer, proper passes rather than six token ones.
-    assert len(programme.seedbed_passes(programme.STANDARD_SEEDBED, 1.0, 6.0, passes=6)) <= 1
+def test_more_water_means_more_passes_and_never_a_heavier_one() -> None:
+    """A pass is one size. It was the other way about, and the run length moved every day.
+
+    What makes a pass the right size is the soil and the seed -- two millimetres wets the top
+    centimetre and does not float seed -- not the arithmetic of the day's remainder.
+    """
+    ordinary = programme.STANDARD_SEEDBED
+    for owed in (6.0, 8.0, 12.0, 30.0):
+        passes = programme.seedbed_passes(ordinary, owed, 6.0)
+        assert set(passes) == {ordinary.mm}, f"one size of pass, {owed} mm owed"
+
+    # The day varies by how many of them it gets, up to what a controller can be set to.
+    assert len(programme.seedbed_passes(ordinary, 6.0, 6.0)) == 3
+    assert len(programme.seedbed_passes(ordinary, 12.0, 6.0)) == 6
+    assert len(programme.seedbed_passes(ordinary, 30.0, 6.0)) == programme.SEEDBED_MAX_PASSES
+
+    # A day that owes almost nothing gets one proper pass rather than a round of token ones.
+    assert len(programme.seedbed_passes(ordinary, 1.0, 6.0)) == 1
+    assert programme.seedbed_passes(ordinary, 0.0, 6.0) == []
+
+    # Soil that cannot take a whole pass at once holds the depth down, and then it is the
+    # depth that gives way -- seed floated off the surface is not a trade worth making.
+    tight = programme.seedbed_passes(ordinary, 6.0, 1.2)
+    assert set(tight) == {1.2}
 
 
 def test_once_the_seedlings_are_up_chitted_seed_is_on_the_ordinary_regime() -> None:

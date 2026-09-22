@@ -416,17 +416,18 @@ def test_the_robot_waits_for_the_seed_to_root_but_the_lawn_is_still_cut() -> Non
 
 def test_pre_germinated_seed_is_watered_more_often_than_dry_seed() -> None:
     """Chitted seed has no reserve: the advice has to ask for more passes, not the same three."""
-    chitted = rules.evaluate(_ctx(days_since_sowing=2, sown_pre_germinated=True, deficit_mm=25.0))
+    chitted = rules.evaluate(_ctx(days_since_sowing=2, sown_pre_germinated=True, deficit_mm=0.0))
     seedbed = next(a for a in chitted if a.code == "germination_watering")
-    assert seedbed.params["times"] == programme.CHITTED_SEEDBED.passes
-    assert seedbed.params["mm"] >= programme.CHITTED_SEEDBED.mm, "never below the damp floor"
+    assert seedbed.params["times"] == programme.CHITTED_SEEDBED.min_passes
+    assert seedbed.params["mm"] == programme.CHITTED_SEEDBED.mm, "the regime's own pass"
     assert "chitted_seed_cannot_dry" in seedbed.reasons
 
-    dry = rules.evaluate(_ctx(days_since_sowing=2, deficit_mm=25.0))
+    dry = rules.evaluate(_ctx(days_since_sowing=2, deficit_mm=0.0))
     ordinary = next(a for a in dry if a.code == "germination_watering")
-    assert ordinary.params["times"] == programme.STANDARD_SEEDBED.passes
+    assert ordinary.params["times"] == programme.STANDARD_SEEDBED.min_passes
     assert "chitted_seed_cannot_dry" not in ordinary.reasons
-    # Same water to put back either way; the chitted day divides it into more, smaller goes.
+    # More passes, and each one lighter: what chitted seed cannot survive is a gap.
+    assert seedbed.params["times"] > ordinary.params["times"]
     assert seedbed.params["mm"] < ordinary.params["mm"]
 
 
@@ -437,7 +438,11 @@ def test_a_lawn_sown_all_over_is_watered_by_its_seedbed_and_not_at_dawn_as_well(
     assert whole.seedbed_target_mm == 12.0
     seedbed = next(a for a in rules.evaluate(whole) if a.code == "germination_watering")
     assert seedbed.params["daily_mm"] == 12.0, "the day's passes cover what the root zone lost"
-    assert seedbed.params["minutes"] == 16, "4 mm a pass at 4 minutes a millimetre"
+    # The water arrives as more passes of the regime's own size, not as heavier ones: what
+    # makes a pass the right size is the seed and the soil, not the size of the deficit.
+    assert seedbed.params["mm"] == programme.STANDARD_SEEDBED.mm
+    assert seedbed.params["times"] == 6
+    assert seedbed.params["minutes"] == 8, "2 mm a pass at 4 minutes a millimetre"
     assert "seedbed_day_replaces_dawn_cycle" in seedbed.reasons
 
     # A few patches sown into standing turf is the other job: the passes stay surface water
@@ -465,9 +470,10 @@ def test_a_seedbed_pass_is_never_heavy_enough_to_move_the_seed() -> None:
 
 def test_chitted_seed_drops_back_to_the_ordinary_regime_once_it_is_up() -> None:
     up = programme.PRE_GERMINATED_CRITICAL_DAYS + 2
-    advice = rules.evaluate(_ctx(days_since_sowing=up, sown_pre_germinated=True, deficit_mm=25.0))
+    advice = rules.evaluate(_ctx(days_since_sowing=up, sown_pre_germinated=True, deficit_mm=0.0))
     seedbed = next(a for a in advice if a.code == "germination_watering")
-    assert seedbed.params["times"] == programme.STANDARD_SEEDBED.passes
+    assert seedbed.params["times"] == programme.STANDARD_SEEDBED.min_passes
+    assert seedbed.params["mm"] == programme.STANDARD_SEEDBED.mm
 
 
 def test_an_overseeding_is_taken_at_its_word_when_the_lawn_has_no_birthday() -> None:
@@ -534,7 +540,7 @@ def test_rain_expected_tomorrow_takes_passes_off_the_seedbed() -> None:
     makes somebody stop trusting the advice.
     """
     dry = _ctx(days_since_sowing=3, sowing_kind="overseed", deficit_mm=6.2)
-    assert len(dry.seedbed_depths_mm) == programme.STANDARD_SEEDBED.passes
+    assert len(dry.seedbed_depths_mm) >= programme.STANDARD_SEEDBED.min_passes
 
     # A shower takes the morning off the day and leaves the late pass, because a daily total
     # says nothing about the hour it fell at.
@@ -573,7 +579,7 @@ def test_the_seedbed_reads_tomorrows_rain_not_this_afternoons() -> None:
         forecast_rain_tomorrow_mm=0.0,
     )
     assert today_only.seedbed_rain_mm == 0.0
-    assert len(today_only.seedbed_depths_mm) == programme.STANDARD_SEEDBED.passes
+    assert len(today_only.seedbed_depths_mm) >= programme.STANDARD_SEEDBED.min_passes
 
 
 def test_a_patch_repair_is_rained_off_too_but_keeps_its_dawn_cycle() -> None:

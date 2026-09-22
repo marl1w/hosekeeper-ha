@@ -285,11 +285,28 @@ in a humid temperate climate first, and generalised by hemisphere and grass clas
   mid-afternoon whatever the daily total says. So the count rises by one for each millimetre
   of ET₀ above 1.5, to a ceiling of six — six start times per programme is the common limit
   on domestic controllers, and about the point past which the passes are too light to wet
-  anything. The depth of each falls as the count rises, since it is the day's water divided
-  further, with a floor of 0.8 mm: below that the canopy intercepts the pass and the soil
-  under it is no damper than it was. The curve is deliberately cautious — a pass too many
-  costs a few minutes of water, a surface allowed to dry once costs the sowing, and the loss
-  is not symmetrical.
+  anything. The curve is deliberately cautious — a pass too many costs a few minutes of
+  water, a surface allowed to dry once costs the sowing, and the loss is not symmetrical.
+- **A pass is one size; the day varies by how many it gets.** It was the other way about at
+  first: the day's water was divided by the count, so the depth was whatever arithmetic left
+  over. Two things then moved at once — the count with the drying rate, the depth inversely
+  with the count — and the run length came out different almost every day, ten minutes then
+  four then nine, on a lawn whose daily total had barely shifted. On a system set by hand
+  that is unusable, and it was never meaningful either: what makes a pass the right size is
+  the soil and the seed, not the day's remainder. Two millimetres wets the top centimetre and
+  does not float seed, and that is as true on Tuesday. So the depth is the regime's, held
+  down only by what sown ground can take at once, and the day is simply how many of them its
+  water comes to — capped at what a controller can be set to, with the balance carrying the
+  rest into tomorrow. A deep deficit on a lawn sown all over therefore arrives as more
+  passes, not heavier ones.
+- **The times are one schedule, not one per zone.** Hosekeeper staggers the hours zone by
+  zone only when it is opening the valves itself, because then two zones told eleven both get
+  eleven and halve each other's pressure. Everywhere else the times are a schedule somebody
+  else keeps, and sequencing is already their job: a controller runs programmes — one start
+  time, stepping through the zones' run lengths back to back — and a person with a hose does
+  the same by walking. Offsetting the display for them describes work they were going to do
+  anyway and pushes the times off the half hour they were rounded to so they could be keyed
+  in at all.
 - A lawn sown from bare soil has no established turf at all, and the establishment rule owns
   its watering outright.
 - Rooting depth grows with the lawn and is not the depth the species reaches when mature.

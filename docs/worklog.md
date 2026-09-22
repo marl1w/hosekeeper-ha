@@ -484,6 +484,30 @@ from the record, and has to be modelled.
   the lawn a little late, which is the safer error.
 - The short-day guard already in place covers what deep shade does to an October window.
 
+### The run length, the day after
+
+Reported again, and fair: the suggested minutes were moving every day -- ten, nine, four,
+six, ten -- while the daily total sat still. Both ends were moving at once, the count with
+the drying rate and the depth inversely with the count, and the ET-driven count added the
+day before had made it worse by flipping 3 to 4 on a tenth of a millimetre of ET.
+
+- The depth is now the regime's own and the count carries the whole variation, so the run
+  length never changes -- 6 minutes on the reporting lawn -- and what moves is how many
+  start times the round has. `daily_mm_for(passes)` keeps the floor and the count the same
+  question, so a hot day arrives with the water for its extra pass rather than being handed
+  three passes' worth and asked for four.
+- A whole-zone seedbed with a real deficit gets it back as more passes rather than heavier
+  ones, capped at six; the balance carries the remainder, which is what it is for.
+- Chitted seed's "more often" now shows where the regime's floor decides rather than where a
+  deep deficit caps both at six, which is what the test asks about.
+
+On the way, `_queued` was changed to key off `irrigation_type` instead of the valve entity,
+on the reasoning that sprinklers behind a controller Hosekeeper cannot drive are still a
+queue. Then the output was looked at: it pushed the zones to 10:38, 10:46, 10:54 and undid
+the half-hour grid to describe sequencing the controller already does. Reverted, and the
+comment now gives the real reason -- the stagger is for valves Hosekeeper opens, because
+only then is the hour a command rather than a suggestion.
+
 ### Still open
 
 - Shade is taken as one number for the zone, and the sun moves. A wall on the east side

@@ -15,6 +15,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, async_
 
 from custom_components.hosekeeper.const import (
     CONF_HUMIDITY_SENSOR,
+    CONF_IRRIGATION_TYPE,
     CONF_MOWER_ENTITY,
     CONF_SOLAR_SENSOR,
     CONF_TEMPERATURE_SENSOR,
@@ -635,14 +636,16 @@ async def test_rain_after_the_plan_was_made_takes_the_watering_back(
 async def test_a_lawn_watered_by_hand_is_given_no_queue(
     hass: HomeAssistant, field_data: dict[str, Any]
 ) -> None:
-    """The queue is a fact about a controller, not about grass.
+    """The queue is a fact about the plumbing, not about grass.
 
-    A lawn with no valve is watered by somebody with a hose, who does one zone and then the
-    next. Staggering the hours they are given by seven minutes and then fourteen is a
-    precision nobody asked for and nothing enforces, and it reads as though the zones needed
-    watering at different times of day.
+    A hose is one person doing one zone and then the next. Staggering the hours they are
+    given by seven minutes and then fourteen is a precision nobody asked for and nothing
+    enforces, and it reads as though the zones needed watering at different times of day.
+
+    Note what this is not: a lawn on sprinklers whose controller Hosekeeper cannot drive is
+    still a queue, and gets one. Having no valve entity is not the same as having no valve.
     """
-    lawn, zone = split(field_data)
+    lawn, zone = split(field_data | {CONF_IRRIGATION_TYPE: "hose_manual"})
     entry = make_entry(hass, lawn, [zone, zone | {CONF_NAME: "North lawn"}])
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
@@ -1155,3 +1158,36 @@ async def test_the_morning_the_humidity_falls_is_written_down_as_the_dew_going(
     assert (zone.diary.today().get("obs") or {})["dew_clear_min"] == (
         dried_at.hour * 60 + dried_at.minute
     )
+
+
+@pytest.mark.usefixtures("weather_service", "station")
+async def test_zones_off_a_controller_share_one_start_time_and_differ_only_in_run_length(
+    hass: HomeAssistant, field_data: dict[str, Any]
+) -> None:
+    """The stagger is for valves Hosekeeper opens, not for a schedule somebody else keeps.
+
+    A controller runs programmes: one start time, and it steps through the zones back to
+    back without being told when each begins. Offsetting the hours zone by zone describes
+    work it was going to do anyway, and pushes the times off the half hour they were rounded
+    to so they could be keyed in at all.
+    """
+    plumbed = field_data | {CONF_IRRIGATION_TYPE: "pop_up_spray"}
+    plumbed.pop(CONF_VALVE_ENTITY, None)
+    lawn, zone = split(plumbed)
+    entry = make_entry(hass, lawn, [zone, zone | {CONF_NAME: "North lawn"}])
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    zones = list(entry.runtime_data.zones.values())
+    for each in zones:
+        each.diary.add_maintenance("sowing", at=dt_util.now())
+        await each.coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    starts = [
+        [c["start"][11:16] for c in each.coordinator.data.irrigation_plan.get("germination") or []]
+        for each in zones
+    ]
+    assert all(starts), "both zones should have been given passes"
+    assert starts[0] == starts[1], "one programme start time, which the controller sequences"
+    assert all(at[3:] in ("00", "30") for run in starts for at in run), "still on the grid"

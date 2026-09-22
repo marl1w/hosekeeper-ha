@@ -967,15 +967,22 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
     def _queued(self) -> bool:
         """Return whether this zone waits its turn at a valve.
 
-        The queue is a fact about a controller, not about grass. A lawn watered by hand has
-        no valve to take turns at: the times on the screen are for a person with a hose, who
-        does one zone and then the next, and telling them 11:00, 11:07 and 11:14 is a
-        precision nobody asked for and nothing enforces.
+        The queue exists because Hosekeeper opens the valves itself: when it is the thing
+        holding the clock, two zones told eleven both get eleven and share one valve's worth
+        of pressure between them. So the hour has to be this zone's own.
+
+        Everywhere else the times are a schedule for somebody else to keep, and sequencing is
+        already their job. A controller runs programmes: one start time, and it steps through
+        the zones' run lengths back to back without being told when each begins. A person
+        with a hose does the same thing by walking. Handing either of them 11:00, 11:07 and
+        11:14 describes work they were going to do anyway, in a precision nothing enforces,
+        and it reads as though the zones wanted watering at different times of day -- while
+        pushing the times off the half hour they were rounded to so they could be keyed in.
         """
         return self.field.valve_entity is not None
 
     def _valved(self, zone_id: str) -> bool:
-        """Return whether another zone of this lawn is on a valve of its own."""
+        """Return whether another zone of this lawn is on a valve Hosekeeper opens."""
         zones = getattr(self.config_entry, "runtime_data", None)
         zone = zones.zones.get(zone_id) if zones else None
         return zone is not None and zone.field.valve_entity is not None

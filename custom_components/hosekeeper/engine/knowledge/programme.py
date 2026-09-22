@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import datetime as dt
+import math
 
 
 @dataclass(frozen=True, slots=True)
@@ -375,10 +376,14 @@ class SeedbedRegime:
         """Return the fewest passes the regime runs, for a day whose weather is not known."""
         return self.min_passes
 
+    def daily_mm_for(self, passes: int) -> float:
+        """Return the depth a day of `passes` puts on the surface between them."""
+        return round(passes * self.mm, 1)
+
     @property
     def daily_mm(self) -> float:
-        """Return the depth the day's passes put on the surface between them."""
-        return round(self.min_passes * self.mm, 1)
+        """Return the depth the fewest passes put on, for a day with no weather yet."""
+        return self.daily_mm_for(self.min_passes)
 
 
 # The ordinary seedbed: three passes at least, across the part of the day that dries, the
@@ -564,20 +569,32 @@ def seedbed_passes(
     is wettest in the morning, from dew and from whatever fell overnight, and driest by the
     end of the afternoon.
     """
-    wanted = regime.min_passes if passes is None else passes
-    if wanted <= 0 or day_mm <= 0:
+    most = SEEDBED_MAX_PASSES if passes is None else passes
+    depth = min(regime.mm, cap_mm)
+    if most <= 0 or day_mm <= 0 or depth < SEEDBED_MIN_PASS_MM:
         return []
-    # The floor is the depth one pass has to reach to wet anything; on a day split into more
-    # passes than the regime's own, each is correspondingly lighter, so the floor comes down
-    # with the count. What it may never do is fall below the point where a pass damps the
-    # leaf and nothing else.
-    floor = min(regime.mm * regime.min_passes / wanted, cap_mm)
-    floor = max(floor, SEEDBED_MIN_PASS_MM)
-    if day_mm < floor:
-        return []
-    count = min(wanted, max(1, int(day_mm // floor)))
-    share = max(floor, min(cap_mm, day_mm / count))
-    return [round(share, 1)] * count
+    # A pass is one size, and the day varies by how many of them it gets.
+    #
+    # It used to be the other way about: the day's water was divided by the count, so a pass
+    # was whatever was left over after arithmetic. Two things then moved at once -- the count
+    # with the drying rate, the depth inversely with the count -- and the run length came out
+    # different almost every day: ten minutes, then four, then nine, on a lawn whose daily
+    # total had barely shifted. On a system set by hand that is unusable, and it was never
+    # meaningful: what makes a pass the right size is the soil and the seed, not the day's
+    # remainder. Two millimetres wets the top centimetre and does not float seed, and that is
+    # true on Tuesday as well.
+    #
+    # So the depth is the regime's, held down only by what sown ground can take at once, and
+    # the day is simply how many of them its water comes to. The drying rate does not appear
+    # here at all: it sets the floor under the day's water, which is the caller's business,
+    # and a hot day therefore arrives with more millimetres and leaves with more passes. Rain
+    # comes off the same total and takes whole passes off the day with it.
+    #
+    # The ceiling is what a controller can be set to. What the day owes beyond it is not
+    # forced in -- the surface would shed it -- and the balance carries the rest into
+    # tomorrow, which is what it is for.
+    count = min(most, math.ceil(day_mm / depth))
+    return [round(depth, 1)] * max(0, count)
 
 
 def seedbed_regime(*, pre_germinated: bool, days_since_sowing: int | None) -> SeedbedRegime:

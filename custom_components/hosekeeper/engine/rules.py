@@ -249,7 +249,10 @@ class Context:
         """
         if not self.germinating:
             return 0.0
-        floor = self.seedbed.daily_mm
+        # As many passes as the day's drying rate asked for, not as few as the regime allows:
+        # the floor and the count have to be the same question, or a hot day asks for five
+        # passes and is handed the water for three.
+        floor = self.seedbed.daily_mm_for(self.seedbed_passes_today)
         if not self.seedbed_covers_zone:
             return floor
         return max(floor, max(0.0, self.deficit_mm))
@@ -283,9 +286,7 @@ class Context:
             return []
         regime = self.seedbed
         cap = water.max_seedbed_application(self.soil_type)
-        depths = programme.seedbed_passes(
-            regime, self.seedbed_target_mm, cap, passes=self.seedbed_passes_today
-        )
+        depths = programme.seedbed_passes(regime, self.seedbed_target_mm, cap)
         if depths:
             return depths
         if self.seedbed_rain_mm >= programme.SEEDBED_SOAKING_MM:

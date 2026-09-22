@@ -165,15 +165,10 @@ def project(
         many passes the rest is split into is the day's own business: a hot bright Thursday
         dries its surface faster than a cool Wednesday and is wetted more often for it.
         """
-        owed = max(owed_mm, regime.daily_mm) if seedbed_day else regime.daily_mm
-        depths = tuple(
-            programme.seedbed_passes(
-                regime,
-                max(0.0, owed - rain_mm),
-                seedbed_cap,
-                passes=regime.passes_for(et0_mm),
-            )
-        )
+        wanted = regime.passes_for(et0_mm)
+        floor = regime.daily_mm_for(wanted)
+        owed = max(owed_mm, floor) if seedbed_day else floor
+        depths = tuple(programme.seedbed_passes(regime, max(0.0, owed - rain_mm), seedbed_cap))
         total = round(sum(depths), 1)
         return (total, 0.0, depths) if seedbed_day else (0.0, total, depths)
 

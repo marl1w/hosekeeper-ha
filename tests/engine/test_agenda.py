@@ -6,6 +6,7 @@ import datetime as dt
 import itertools
 
 from custom_components.hosekeeper.engine import agenda, rules
+from custom_components.hosekeeper.engine.knowledge import programme
 from tests.engine.test_rules import _ctx
 
 TODAY = dt.date(2026, 10, 5)
@@ -115,7 +116,9 @@ def test_the_seedbed_is_watered_every_day_until_the_seed_is_up() -> None:
     seedbed = [i for i in items if i.code == "germination_watering"]
     assert len(seedbed) == 11
     assert seedbed[0].date == TODAY.isoformat()
-    assert seedbed[0].params["times"] == 3
+    assert seedbed[0].params["times"] >= programme.STANDARD_SEEDBED.min_passes
+    # One size of pass, whatever the day: the run length is what somebody has to key in.
+    assert {i.params["mm"] for i in seedbed} == {programme.STANDARD_SEEDBED.mm}
 
     # Sown twelve days ago: only the last two days of the fortnight remain.
     late = _ctx(today=TODAY, days_since_sowing=12)
