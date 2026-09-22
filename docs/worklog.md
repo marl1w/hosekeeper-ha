@@ -578,6 +578,14 @@ times, a run length per zone.
 Eleven start times became six, and Zone 1 takes its smaller share as a five-minute run
 against its neighbours' six.
 
+Checked against the instance afterwards, and it was half right: the window had come together
+but Zone 1 was still watering five times where its neighbours watered six. `hours_moved` was
+reading the count off the plan it was checking -- five passes judged against where five
+passes would go -- so a day whose count had changed was never out of date, only a day whose
+hours had. The count is asked for now rather than inferred. Worth remembering as a shape of
+bug rather than a bug: a check that takes one of its inputs from the thing it is checking
+cannot see that input go wrong.
+
 ### Still open
 
 - Shade is taken as one number for the zone, and the sun moves. A wall on the east side

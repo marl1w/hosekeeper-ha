@@ -355,7 +355,7 @@ def test_a_settled_seedbed_whose_hours_have_moved_is_laid_out_again() -> None:
         seedbed_depths=[2.0, 2.0, 2.0],
         seedbed_window=window,
     )
-    assert not schedule.hours_moved(plan, window), "the window it was laid out in"
+    assert not schedule.hours_moved(plan, window, 3), "the window it was laid out in"
 
     # The old fixed hours against today's window: the same water, four hours out.
     stale = schedule.irrigation_plan(
@@ -372,8 +372,13 @@ def test_a_settled_seedbed_whose_hours_have_moved_is_laid_out_again() -> None:
         seedbed_window=(dt.time(9, 0), dt.time(17, 0)),
     )
     assert stale.planned_mm == plan.planned_mm, "nothing the depth test could catch"
-    assert schedule.hours_moved(stale, window)
+    assert schedule.hours_moved(stale, window, 3)
     assert "revised_hours_moved" in schedule.rescheduled(stale).reasons
 
     # A plan with no seedbed in it has no hours to have moved.
-    assert not schedule.hours_moved(schedule.IrrigationPlan(date=dt.date(2026, 9, 23)), window)
+    assert not schedule.hours_moved(schedule.IrrigationPlan(date=dt.date(2026, 9, 23)), window, 3)
+
+    # And the count is part of the shape, not a given. A day settled for three passes that
+    # the lawn has since agreed to water six times is out of date at hours which are, for
+    # three, exactly right -- which is the blind spot reading the count off the plan had.
+    assert schedule.hours_moved(plan, window, 6)

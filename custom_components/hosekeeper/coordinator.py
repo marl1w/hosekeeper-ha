@@ -879,7 +879,9 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
                 if not running:
                     if schedule.worth_rethinking(current.planned_mm, wanted):
                         revision = wanted < current.planned_mm
-                    elif current.seedbed_day and schedule.hours_moved(current, window):
+                    elif current.seedbed_day and schedule.hours_moved(
+                        current, window, len(result.seedbed_depths_mm)
+                    ):
                         # Same water, wrong hours. A plan made under yesterday's rules holds
                         # its millimetres and so survives the depth test, while asking for a
                         # pass at nine on grass that is still wet -- which is the thing the

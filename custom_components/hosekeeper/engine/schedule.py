@@ -87,7 +87,7 @@ def rescheduled(plan: IrrigationPlan) -> IrrigationPlan:
     return replace(plan, reasons=(*plan.reasons, "revised_hours_moved"))
 
 
-def hours_moved(plan: IrrigationPlan, window: tuple[dt.time, dt.time]) -> bool:
+def hours_moved(plan: IrrigationPlan, window: tuple[dt.time, dt.time], passes: int) -> bool:
     """Return whether a settled seedbed's passes no longer sit where today's rules put them.
 
     The depth test cannot see this. A plan holding the same millimetres at the wrong hours is
@@ -96,13 +96,19 @@ def hours_moved(plan: IrrigationPlan, window: tuple[dt.time, dt.time]) -> bool:
     moved at all. The same is true of a lawn that has just learned when its dew lifts, or one
     whose window has crossed a half hour as the season turned.
 
+    `passes` is how many the day wants now, which has to be asked for rather than read off the
+    plan. Reading it off the plan was the first version and it could not see its own blind
+    spot: a day settled for five passes was checked against where five passes would go, so a
+    lawn that had since agreed on six went on watering five times at hours that were, for
+    five, perfectly correct. The count is part of the shape, not a given.
+
     Cheap to ask and almost always false, because the hours are on a half-hour grid precisely
     so they stay put for weeks at a time.
     """
     if not plan.germination:
         return False
     planned = tuple(cycle.start.time() for cycle in plan.germination)
-    return planned != programme.seedbed_times(len(planned), window)
+    return planned != programme.seedbed_times(passes, window)
 
 
 # What one zone leaves between its run and the next zone's.
