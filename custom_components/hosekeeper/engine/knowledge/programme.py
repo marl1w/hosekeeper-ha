@@ -343,6 +343,22 @@ SEEDBED_ET0_BASE_MM = 1.5
 SEEDBED_ET0_PER_PASS_MM = 1.0
 SEEDBED_MAX_PASSES = 6
 
+# How many days of drying the count is read off.
+#
+# A threshold read against a single day's figure is a knife edge: 2.49 mm asks for three
+# passes and 2.51 for four, so a tenth of a millimetre of weather adds a start time, and the
+# next day takes it away again. The schedule is kept by hand, and a person who has to add and
+# drop a run every other day stops keeping it -- the point is to look after a lawn, not to
+# hand somebody a job.
+#
+# Averaging the last few days is the honest fix rather than a deadband bolted on top, because
+# it is also the better question. What a seedbed needs to know is the drying regime it is
+# living in, which is a property of the week, not of one afternoon; a single hot day in a
+# cool spell does not dry the top centimetre out faster than the days either side of it can
+# wet it back. Three days is long enough to stop the chatter and short enough to follow a
+# real change in the weather within a day of it arriving.
+SEEDBED_ET0_DAYS = 3
+
 
 @dataclass(frozen=True, slots=True)
 class SeedbedRegime:

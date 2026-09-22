@@ -111,6 +111,14 @@ class Context:
     The crop figure beside it is what the lawn used, canopy and all. What dries a seedbed is
     the reference one, because a seedbed has no canopy to speak of yet.
     """
+    et0_recent_mm: float | None = None
+    """The same, averaged over the last few days, which is what the seedbed's count reads.
+
+    A count taken off one day's figure chatters across its threshold and asks somebody to add
+    a run one day and drop it the next. It is also the wrong question: what a seedbed lives
+    in is the week's drying regime, not one afternoon of it. Falls back to today's when there
+    is no run of days to average yet.
+    """
     latitude: float = 0.0
     longitude: float = 0.0
     utc_offset_h: float = 0.0
@@ -212,7 +220,9 @@ class Context:
     @property
     def seedbed_passes_today(self) -> int:
         """Return how many passes today's drying power asks the seedbed for."""
-        return self.seedbed.passes_for(self.et0_today_mm)
+        return self.seedbed.passes_for(
+            self.et0_recent_mm if self.et0_recent_mm is not None else self.et0_today_mm
+        )
 
     @property
     def seedbed(self) -> programme.SeedbedRegime:

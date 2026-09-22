@@ -287,6 +287,14 @@ in a humid temperate climate first, and generalised by hemisphere and grass clas
   on domestic controllers, and about the point past which the passes are too light to wet
   anything. The curve is deliberately cautious — a pass too many costs a few minutes of
   water, a surface allowed to dry once costs the sowing, and the loss is not symmetrical.
+- **The count reads a few days of drying, not one.** A threshold taken against a single day's
+  ET₀ is a knife edge: 2.49 mm asks for three passes and 2.51 for four, so a tenth of a
+  millimetre of weather adds a start time and the next day takes it away. Somebody keeping the
+  schedule by hand stops keeping it, and the point is to look after a lawn rather than to hand
+  somebody a job. Averaging three days is the better question as well as the calmer one: what
+  a seedbed lives in is the week's drying regime, not one afternoon of it, and a single hot
+  day in a cool spell does not dry the top centimetre faster than the days either side wet it
+  back. Three days stops the chatter and still follows a real change within a day of it.
 - **A pass is one size; the day varies by how many it gets.** It was the other way about at
   first: the day's water was divided by the count, so the depth was whatever arithmetic left
   over. Two things then moved at once — the count with the drying rate, the depth inversely

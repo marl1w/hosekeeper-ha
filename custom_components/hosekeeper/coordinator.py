@@ -819,6 +819,7 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
         target_date = sunrise.date()
         stored = today.get("irrigation_plan")
         revision: bool | None = None
+        relay = False
         if stored and stored.get("date") == target_date.isoformat():
             current = schedule.IrrigationPlan.from_dict(stored)
             # Settling the plan protects it from the weather changing its mind. It is not
@@ -851,9 +852,22 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
                 running = first_start is not None and now >= first_start
                 rate = self.field.application_rate_mm_h
                 minutes_per_mm = (60.0 / rate) if rate else None
-                if not running and schedule.worth_rethinking(current.planned_mm, wanted):
-                    revision = wanted < current.planned_mm
-        if revision is None and stored and stored.get("date") == target_date.isoformat():
+                window = result.context.seedbed_window(target_date)
+                if not running:
+                    if schedule.worth_rethinking(current.planned_mm, wanted):
+                        revision = wanted < current.planned_mm
+                    elif current.seedbed_day and schedule.hours_moved(current, window):
+                        # Same water, wrong hours. A plan made under yesterday's rules holds
+                        # its millimetres and so survives the depth test, while asking for a
+                        # pass at nine on grass that is still wet -- which is the thing the
+                        # window was made to stop.
+                        relay = True
+        if (
+            revision is None
+            and not relay
+            and stored
+            and stored.get("date") == target_date.isoformat()
+        ):
             # Heat does not always announce itself in time. The watering is decided once and
             # kept, so its depth cannot wobble; a syringing is a millimetre and a half that
             # never enters the balance, so it may still be added to a plan already made.
@@ -933,6 +947,8 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
         )
         if revision is not None:
             fresh = schedule.revised(fresh, wetter=revision)
+        elif relay:
+            fresh = schedule.rescheduled(fresh)
         today["irrigation_plan"] = fresh.as_dict()
         self._chain_register(
             target_date,

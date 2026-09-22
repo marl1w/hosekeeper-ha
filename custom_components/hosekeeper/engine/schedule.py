@@ -82,6 +82,29 @@ def revised(plan: IrrigationPlan, *, wetter: bool) -> IrrigationPlan:
     return replace(plan, reasons=reasons)
 
 
+def rescheduled(plan: IrrigationPlan) -> IrrigationPlan:
+    """Return the plan with a note that it was re-laid because its hours had moved."""
+    return replace(plan, reasons=(*plan.reasons, "revised_hours_moved"))
+
+
+def hours_moved(plan: IrrigationPlan, window: tuple[dt.time, dt.time]) -> bool:
+    """Return whether a settled seedbed's passes no longer sit where today's rules put them.
+
+    The depth test cannot see this. A plan holding the same millimetres at the wrong hours is
+    materially wrong and reads as right: the passes drifted by four hours when the window
+    stopped being a constant and started following the sun, and nothing in the millimetres
+    moved at all. The same is true of a lawn that has just learned when its dew lifts, or one
+    whose window has crossed a half hour as the season turned.
+
+    Cheap to ask and almost always false, because the hours are on a half-hour grid precisely
+    so they stay put for weeks at a time.
+    """
+    if not plan.germination:
+        return False
+    planned = tuple(cycle.start.time() for cycle in plan.germination)
+    return planned != programme.seedbed_times(len(planned), window)
+
+
 # What one zone leaves between its run and the next zone's.
 #
 # A controller opens one valve at a time and takes a moment over it, and two runs written

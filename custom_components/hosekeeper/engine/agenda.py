@@ -115,6 +115,28 @@ class DayForecast:
     rain_mm: float | None
 
 
+def _drying_rate(
+    ctx: Context, by_date: dict[dt.date, DayForecast], latitude: float, date: dt.date
+) -> float | None:
+    """Return the drying rate a day sits in: its own and the days before it, averaged.
+
+    Anchored on today's measured figure where the run reaches back past the forecast, so the
+    first days of the week are not read off predictions alone when there is a record.
+    """
+    seen = []
+    for back in range(programme.SEEDBED_ET0_DAYS):
+        day = date - dt.timedelta(days=back)
+        if day < ctx.today:
+            if ctx.et0_recent_mm is not None:
+                seen.append(ctx.et0_recent_mm)
+            break
+        fc = by_date.get(day)
+        value = _et0_for(fc, latitude) if fc else (ctx.et0_today_mm if day == ctx.today else None)
+        if value is not None:
+            seen.append(value)
+    return sum(seen) / len(seen) if seen else None
+
+
 def _et0_for(day: DayForecast, latitude: float) -> float:
     if day.tmax is None or day.tmin is None:
         return 0.0
@@ -180,6 +202,10 @@ def project(
         kc = grass.crop_coefficient(ctx.grass_type, date.month, ctx.northern_hemisphere)
         et0 = _et0_for(fc, latitude) if fc else ctx.et0_today_mm
         etc = et0 * kc if fc else ctx.etc_today_mm
+        # The seedbed's count reads a few days of drying rather than one, here as well as on
+        # today's page: a forecast that dips for a single afternoon should not add a start
+        # time to the week and take it away again the day after.
+        drying = _drying_rate(ctx, by_date, latitude, date)
         rain = expected_rain(fc.rain_mm if fc else None, ctx.skill)
         sowing_today = offset < seedbed_left
         if offset == 0:
@@ -217,7 +243,7 @@ def project(
             # The seedbed is put back to full every day rather than run down to a threshold:
             # the seed lives in the top centimetre, which is either damp or it is not. Rain
             # expected that day does the same job and comes off what the passes have to do.
-            irrigation, surface, passes = seedbed_for(wanted, rain, et0)
+            irrigation, surface, passes = seedbed_for(wanted, rain, drying)
         if not (sowing_today and seedbed_day) and not dormant and wanted >= threshold:
             # A lawn whose seed is only in patches still has its dawn cycle to run.
             candidate = round(max(0.0, deficit * ctx.irrigation_factor - rain))

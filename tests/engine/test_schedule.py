@@ -332,3 +332,48 @@ def test_a_syringing_can_be_taken_back_off_a_plan_that_should_not_have_one() -> 
     assert "midday_syringing_heat" not in cooled.reasons
     # Everything else the day was told to do is untouched.
     assert cooled.cycles == hot.cycles
+
+
+def test_a_settled_seedbed_whose_hours_have_moved_is_laid_out_again() -> None:
+    """A plan can hold the right millimetres at the wrong hours, and read as right.
+
+    The depth test cannot see it: when the window stopped being three constants and started
+    following the sun, the passes moved by four hours and not one millimetre changed. Same
+    for a lawn that has just learned when its own dew lifts.
+    """
+    window = programme.seedbed_window(dt.time(7, 20), dt.time(19, 24))
+    plan = schedule.irrigation_plan(
+        date=dt.date(2026, 9, 23),
+        sunrise=SUNRISE,
+        needed_mm=6.0,
+        minutes_per_mm=3.0,
+        heat_stress=False,
+        forecast_tmax=24.0,
+        dormant=False,
+        germinating=True,
+        seedbed_whole_zone=True,
+        seedbed_depths=[2.0, 2.0, 2.0],
+        seedbed_window=window,
+    )
+    assert not schedule.hours_moved(plan, window), "the window it was laid out in"
+
+    # The old fixed hours against today's window: the same water, four hours out.
+    stale = schedule.irrigation_plan(
+        date=dt.date(2026, 9, 23),
+        sunrise=SUNRISE,
+        needed_mm=6.0,
+        minutes_per_mm=3.0,
+        heat_stress=False,
+        forecast_tmax=24.0,
+        dormant=False,
+        germinating=True,
+        seedbed_whole_zone=True,
+        seedbed_depths=[2.0, 2.0, 2.0],
+        seedbed_window=(dt.time(9, 0), dt.time(17, 0)),
+    )
+    assert stale.planned_mm == plan.planned_mm, "nothing the depth test could catch"
+    assert schedule.hours_moved(stale, window)
+    assert "revised_hours_moved" in schedule.rescheduled(stale).reasons
+
+    # A plan with no seedbed in it has no hours to have moved.
+    assert not schedule.hours_moved(schedule.IrrigationPlan(date=dt.date(2026, 9, 23)), window)

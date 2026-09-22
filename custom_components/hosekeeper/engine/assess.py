@@ -359,6 +359,7 @@ def assess(
     temps: list[phenology.DayTemps] = []
     rh_means: list[float] = []
     dew_minutes: list[int] = []
+    et0_recent: list[float] = []
     tmeans: list[float] = []
     pairs: list[climate.ForecastPair] = []
     rows: list[tuple[dt.date, float | None, float | None, float | None]] = []
@@ -370,6 +371,8 @@ def assess(
         tmax, tmin = row.get("tmax"), row.get("tmin")
         if tmax is not None and tmin is not None:
             temps.append(phenology.DayTemps(date, float(tmax), float(tmin)))
+        if (today - date).days < programme.SEEDBED_ET0_DAYS and row.get("et0_mm") is not None:
+            et0_recent.append(float(row["et0_mm"]))
         if (today - date).days < DEW_HABIT_DAYS:
             observed = (row.get("obs") or {}).get("dew_clear_min")
             if observed is not None:
@@ -469,6 +472,7 @@ def assess(
         raw_mm=soil.raw_mm,
         etc_today_mm=etc,
         et0_today_mm=record["et0_mm"],
+        et0_recent_mm=(sum(et0_recent) / len(et0_recent)) if et0_recent else None,
         latitude=lawn.latitude,
         longitude=lawn.longitude,
         utc_offset_h=lawn.utc_offset_h,

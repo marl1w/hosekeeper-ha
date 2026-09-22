@@ -508,6 +508,22 @@ the half-hour grid to describe sequencing the controller already does. Reverted,
 comment now gives the real reason -- the stagger is for valves Hosekeeper opens, because
 only then is the hour a command rather than a suggestion.
 
+### Two more, reported from the panel
+
+- **The month view was showing tomorrow at 09:00, 13:00 and 17:00.** A settled plan is not
+  revised unless the day has materially moved, and that test only ever compared millimetres:
+  a plan made under the old constants held 9.6 mm at the wrong hours, passed the depth test
+  untouched, and would have watered wet grass at nine. `schedule.hours_moved` now asks
+  whether a settled seedbed's passes still sit where today's rules would put them, and the
+  plan is laid out again when they do not, with `revised_hours_moved` saying why. Cheap to
+  ask and almost always false, because the half-hour grid keeps the hours still for weeks.
+- **The count chattered across its threshold** -- 2.49 mm of ET0 asking for three passes and
+  2.51 for four -- so a start time appeared and vanished on a tenth of a millimetre. It now
+  reads the mean of three days, on today's page and across the projected week alike. The
+  smoothing is the honest fix rather than a deadband: the drying regime a seedbed lives in is
+  a property of the week, not of one afternoon. As the user put it, the job is to take care
+  of the lawn, not to make it a job.
+
 ### Still open
 
 - Shade is taken as one number for the zone, and the sun moves. A wall on the east side

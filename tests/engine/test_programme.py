@@ -252,3 +252,21 @@ def test_deep_shade_on_a_short_day_still_leaves_a_window_to_water_in() -> None:
 
 def _minutes(at: dt.time) -> int:
     return at.hour * 60 + at.minute
+
+
+def test_the_count_is_read_off_a_few_days_of_drying_not_one() -> None:
+    """A threshold read against one day's figure chatters and hands somebody a job."""
+    ordinary = programme.STANDARD_SEEDBED
+    # A tenth of a millimetre either side of the boundary is the whole problem.
+    assert ordinary.passes_for(2.49) == 3
+    assert ordinary.passes_for(2.51) == 4
+    # Averaged over the run the constant names, the same weather asks for one steady answer.
+    week = [2.28, 2.60, 1.78, 2.19, 2.36]
+    means = [
+        sum(week[max(0, i - programme.SEEDBED_ET0_DAYS + 1) : i + 1])
+        / len(week[max(0, i - programme.SEEDBED_ET0_DAYS + 1) : i + 1])
+        for i in range(len(week))
+    ]
+    assert len({ordinary.passes_for(m) for m in means}) == 1, "one count across the week"
+    # Day by day, the same week would have swung.
+    assert len({ordinary.passes_for(d) for d in week}) > 1
