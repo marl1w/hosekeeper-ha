@@ -639,3 +639,35 @@ def test_a_lawn_with_no_push_mower_is_told_what_it_can_actually_do() -> None:
         days_since_sowing=7, establishment_age_days=92, days_since_mowing=9, robot_mower=True
     )
     assert "mow_by_hand_while_seed_roots" in _codes(rules.evaluate(with_hand))
+
+
+def test_a_zone_needing_less_water_runs_for_less_time_not_at_hours_of_its_own() -> None:
+    """One lawn, one clock. A controller has one programme and a run length per zone.
+
+    A zone left to itself picks the count its own water comes to, so a zone a little drier
+    than its neighbour waters at different hours all fortnight and the controller is never
+    off. Told how often the lawn waters, it takes its share as a shorter run instead.
+    """
+    agreed = 6
+    thirsty = _ctx(days_since_sowing=3, sowing_kind="overseed", deficit_mm=12.0)
+    quiet = _ctx(
+        days_since_sowing=3,
+        sowing_kind="overseed",
+        deficit_mm=12.0,
+        seedbed_passes_agreed=agreed,
+    )
+    assert len(quiet.seedbed_depths_mm) == agreed, "the lawn's count, not its own"
+
+    # Less water over the same number of passes is a lighter pass, not a missing one.
+    drier = _ctx(
+        days_since_sowing=3,
+        sowing_kind="overseed",
+        deficit_mm=7.0,
+        seedbed_passes_agreed=agreed,
+    )
+    assert len(drier.seedbed_depths_mm) == agreed
+    assert drier.seedbed_depths_mm[0] < quiet.seedbed_depths_mm[0]
+
+    # And the floor under a zone stays its own: the lawn's count decides how often it waters,
+    # never how much, or every zone is watered to the wettest one.
+    assert sum(drier.seedbed_depths_mm) < sum(thirsty.seedbed_depths_mm)

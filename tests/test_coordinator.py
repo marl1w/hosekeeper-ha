@@ -14,6 +14,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 
 from custom_components.hosekeeper.const import (
+    CONF_FEATURES,
     CONF_HUMIDITY_SENSOR,
     CONF_IRRIGATION_TYPE,
     CONF_MOWER_ENTITY,
@@ -1191,3 +1192,44 @@ async def test_zones_off_a_controller_share_one_start_time_and_differ_only_in_ru
     assert all(starts), "both zones should have been given passes"
     assert starts[0] == starts[1], "one programme start time, which the controller sequences"
     assert all(at[3:] in ("00", "30") for run in starts for at in run), "still on the grid"
+
+
+@pytest.mark.usefixtures("weather_service", "station", "dry_forecast")
+async def test_a_lawns_zones_water_at_one_set_of_hours_and_differ_in_run_length(
+    hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
+) -> None:
+    """One programme, one clock, a run length each. Four clocks is a lawn turned into a job.
+
+    A zone left to itself picks the count its own water comes to, so a zone a little drier
+    than its neighbour waters at different hours all fortnight, and a controller that has to
+    be told both is never off. The zones agree instead: how often is the greatest any of them
+    asked for, and the zone that needs less water runs for less time at the same hours.
+    """
+    lawn, zone = split(field_data)
+    # Shaded, which is what made two zones of one lawn diverge in the first place: the dew
+    # holds on later under a wall and the drying stops sooner.
+    shaded = zone | {
+        CONF_NAME: "Shaded lawn",
+        CONF_FEATURES: [{"kind": "structure", "shade_pct": 30.0}],
+    }
+    entry = make_entry(hass, lawn, [zone, shaded])
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    zones = list(entry.runtime_data.zones.values())
+    for each in zones:
+        each.diary.add_maintenance("sowing", at=dt_util.now())
+    # Twice around: a zone publishes what it would ask for as it refreshes, so the first
+    # pass after a restart may see only some of them.
+    for _ in range(2):
+        for each in zones:
+            await each.coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    plans = [each.coordinator.data.irrigation_plan for each in zones]
+    runs = [[c["start"][11:16] for c in plan.get("germination") or []] for plan in plans]
+    assert all(runs), "both zones should have been given passes"
+    assert runs[0] == runs[1], "one lawn, one set of start times"
+    # And the water each zone actually needs, taken as a run length rather than as an hour.
+    minutes = [[c["minutes"] for c in plan["germination"]] for plan in plans]
+    assert all(len(set(each)) == 1 for each in minutes), "one run length per zone for the day"

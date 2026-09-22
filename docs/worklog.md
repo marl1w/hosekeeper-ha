@@ -550,6 +550,34 @@ Not fixed here, because it is not in this repo: the daily notification automatio
 zones by job name and reports the first zone's times for the group, which has the same fault
 for the same reason.
 
+### One clock for a lawn
+
+Reported: Zone 1 at 11:00, 12:00, 13:00, 14:30, 15:30 and its three neighbours at 10:30,
+11:30, 12:30, 14:00, 15:00, 16:00 -- eleven distinct start times across one lawn, which is a
+controller that is never off. Twenty-seven minutes of shade, smaller than the grid itself,
+had spawned a second programme.
+
+Three options were put up -- merge everything onto the wettest zone's schedule, drop
+sub-slot shade corrections, or share a ladder and let zones skip rungs -- and the answer
+that came back was a fourth and better one: same hours for every zone, less water for the
+zone that needs less. Which is exactly what a controller is: one programme, one set of start
+times, a run length per zone.
+
+- The zones of a lawn now agree a count and a window. The count is the greatest any zone
+  asked for, since it is a floor under how long the surface is left alone. The window is the
+  narrowest they allow -- the last to lose its dew, the first to start losing the light.
+- `seedbed_passes_over` divides a zone's own water across the lawn's count, so a quieter zone
+  gets a lighter pass at the same hour rather than an hour of its own.
+- The floor under a zone stays its own drying, not the agreed count. The first cut took the
+  floor from the agreed count and watered all four zones to 12 mm -- every zone watered to
+  the wettest one, the opposite of what sharing the hours was for.
+- Zones publish what they would ask for as they refresh, so the first pass after a restart
+  can see only some of them. `hours_moved` is what makes that safe: the hours settle, it
+  notices, and the day is laid out again.
+
+Eleven start times became six, and Zone 1 takes its smaller share as a five-minute run
+against its neighbours' six.
+
 ### Still open
 
 - Shade is taken as one number for the zone, and the sun moves. A wall on the east side

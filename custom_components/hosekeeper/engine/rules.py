@@ -122,6 +122,20 @@ class Context:
     latitude: float = 0.0
     longitude: float = 0.0
     utc_offset_h: float = 0.0
+    seedbed_passes_agreed: int | None = None
+    """How many passes the whole lawn is watering in today, when its zones have agreed one.
+
+    A zone left to itself picks the count its own water comes to, and four zones of one lawn
+    then keep four clocks. A controller has one programme and a run length per zone, so the
+    count -- and with it the hours -- belongs to the lawn, and a zone needing less water takes
+    it as a shorter run rather than as an hour of its own.
+    """
+    seedbed_window_agreed: tuple[dt.time, dt.time] | None = None
+    """The hours that lawn settled on, when they are not this zone's own.
+
+    The narrower of what its zones allow: the last of them to lose its dew and the first to
+    start losing the light, so no corner is watered wet and none is left wet after dark.
+    """
     dew_clear: dt.time | None = None
     """The hour this lawn's own humidity says the leaf usually dries, when it has been read.
 
@@ -211,11 +225,25 @@ class Context:
 
     def seedbed_window(self, date: dt.date | None = None) -> tuple[dt.time, dt.time]:
         """Return the first and last hour a seedbed may be watered on a day."""
+        if self.seedbed_window_agreed is not None:
+            return self.seedbed_window_agreed
+        return self.own_seedbed_window(date)
+
+    def own_seedbed_window(self, date: dt.date | None = None) -> tuple[dt.time, dt.time]:
+        """Return the window this zone would keep on its own, before the lawn agrees one."""
         return programme.seedbed_window(*self.sun(date), self.dew_clear, self.shaded_fraction)
 
     def seedbed_hours(self, count: int, date: dt.date | None = None) -> tuple[dt.time, ...]:
         """Return the hours `count` passes run at on a day, spread across its window."""
         return programme.seedbed_times(count, self.seedbed_window(date))
+
+    @property
+    def seedbed_passes_wanted(self) -> int:
+        """Return how many passes this zone would water in if it kept its own clock."""
+        if not self.germinating:
+            return 0
+        cap = water.max_seedbed_application(self.soil_type)
+        return len(programme.seedbed_passes(self.seedbed, self.seedbed_target_mm, cap))
 
     @property
     def seedbed_passes_today(self) -> int:
@@ -262,6 +290,11 @@ class Context:
         # As many passes as the day's drying rate asked for, not as few as the regime allows:
         # the floor and the count have to be the same question, or a hot day asks for five
         # passes and is handed the water for three.
+        #
+        # This zone's own drying, though, never the lawn's agreed count. How often the lawn
+        # waters is settled by its thirstiest zone; how much each zone gets is still its own
+        # business, and taking the floor from somebody else's deficit waters every zone to
+        # the wettest one -- which is the opposite of what sharing the hours was for.
         floor = self.seedbed.daily_mm_for(self.seedbed_passes_today)
         if not self.seedbed_covers_zone:
             return floor
@@ -296,6 +329,12 @@ class Context:
             return []
         regime = self.seedbed
         cap = water.max_seedbed_application(self.soil_type)
+        if self.seedbed_passes_agreed:
+            # The lawn has settled how often it waters; this zone's share of it is a run
+            # length, not a clock of its own.
+            return programme.seedbed_passes_over(
+                self.seedbed_passes_agreed, self.seedbed_target_mm, cap
+            )
         depths = programme.seedbed_passes(regime, self.seedbed_target_mm, cap)
         if depths:
             return depths

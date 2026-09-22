@@ -613,6 +613,26 @@ def seedbed_passes(
     return [round(depth, 1)] * max(0, count)
 
 
+def seedbed_passes_over(count: int, day_mm: float, cap_mm: float) -> list[float]:
+    """Return `count` passes sharing a day's water between them.
+
+    The other way round from `seedbed_passes`, and it exists for lawns rather than for zones.
+    A controller runs one programme: one set of start times, stepping through the zones with
+    a run length each. So the hours have to be the lawn's, agreed across its zones, and what
+    a zone that needs less water does with them is run for less time -- not water at hours of
+    its own. Four zones each keeping their own clock is four programmes and a controller that
+    is never off, which is a lawn turned into a job.
+
+    Within a zone the run length is still one number for the day, and across the season it
+    still barely moves, because the count it is divided by moved with the water. What it is
+    no longer free to do is disagree with the lawn about when to water.
+    """
+    if count <= 0 or day_mm <= 0:
+        return []
+    depth = min(cap_mm, max(SEEDBED_MIN_PASS_MM, day_mm / count))
+    return [round(depth, 1)] * count
+
+
 def seedbed_regime(*, pre_germinated: bool, days_since_sowing: int | None) -> SeedbedRegime:
     """Return the regime a seedbed is on today.
 

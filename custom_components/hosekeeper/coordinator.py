@@ -661,6 +661,29 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             radiation_estimated=bool(obs.get("rs_used_estimate")),
             soil_moisture_pct=self._read_float(self.field.soil_moisture_sensor),
         )
+        # A lawn waters on one clock. Whether this zone's own answer stands or the lawn's
+        # does is settled once the zone has worked out what it would ask for alone, so the
+        # assessment is made twice on a seedbed day: once to have an opinion, once to hold
+        # the lawn's. Only the zones of this entry are asked -- a lawn is a config entry, and
+        # two lawns on one controller are two programmes whatever the engine thinks.
+        agreed_passes, agreed_window = self._lawn_seedbed(result, now.date())
+        if agreed_passes and (
+            agreed_passes != len(result.seedbed_depths_mm)
+            or agreed_window != result.context.seedbed_window()
+        ):
+            result = assess.assess(
+                lawn,
+                self.diary.days,
+                today=now.date(),
+                weather=weather_day,
+                forecast=ahead,
+                adaptation_state=self.diary.adaptation,
+                plan_state=self.diary.plan,
+                radiation_estimated=bool(obs.get("rs_used_estimate")),
+                soil_moisture_pct=self._read_float(self.field.soil_moisture_sensor),
+                seedbed_passes_agreed=agreed_passes,
+                seedbed_window_agreed=agreed_window,
+            )
         # What today asked for, kept on the day itself.
         #
         # The agenda is recomputed from scratch at every refresh and only ever looks forward,
@@ -1014,6 +1037,49 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             if zone_id != self.zone_id and slot.get("start") and self._valved(zone_id)
         ]
         return min([latest_end, *(start - schedule.VALVE_GAP for start in starts)])
+
+    def _lawn_seedbed(
+        self, result: assess.Assessment, date: dt.date
+    ) -> tuple[int | None, tuple[dt.time, dt.time] | None]:
+        """Return how often this lawn waters its seedbed today, and between which hours.
+
+        One programme, one set of start times, a run length per zone: that is what a
+        controller is, and a zone that keeps a clock of its own turns a lawn into a second
+        programme. So the zones agree, and a zone needing less water takes it as a shorter
+        run rather than as an hour nobody else is watering at.
+
+        How often is the greatest any zone asked for, because a count is a floor under how
+        long the surface is left alone and the driest zone sets it; the others simply run for
+        less time at the same hours. Between which hours is the narrowest the zones allow --
+        the last of them to lose its dew and the first to start losing the light -- so no
+        corner is watered while it is still wet, and none is left wet after dark. A zone dark
+        enough to pull the whole lawn in is a zone that wants to be a lawn of its own, and
+        the setup can say so.
+
+        Zones publish what they would ask for as they refresh, so the first pass after a
+        restart may see only some of them. That is what the settled plan's own re-laying is
+        for: the hours move, `hours_moved` notices, and the day is laid out again.
+        """
+        if not result.germinating:
+            return None, None
+        zones = getattr(self.config_entry, "runtime_data", None)
+        if zones is None:
+            return None, None
+        mine = {
+            "passes": result.context.seedbed_passes_wanted,
+            "window": [at.isoformat() for at in result.context.own_seedbed_window(date)],
+        }
+        shared = self.hass.data[DOMAIN].setdefault("seedbed", {}).setdefault(date.isoformat(), {})
+        shared[self.zone_id] = mine
+        live = [shared[z] for z in zones.zones if z in shared and shared[z]["passes"]]
+        if not live:
+            return None, None
+        passes = max(int(z["passes"]) for z in live)
+        first = max(dt.time.fromisoformat(z["window"][0]) for z in live)
+        last = min(dt.time.fromisoformat(z["window"][1]) for z in live)
+        if last <= first:
+            return passes, None  # the zones want hours that do not overlap; keep each its own
+        return passes, (first, last)
 
     def _germination_offset(self, date: dt.date) -> dt.timedelta:
         """Return how long this lawn waits before its seedbed passes: the queue ahead of it."""

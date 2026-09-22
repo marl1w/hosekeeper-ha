@@ -307,6 +307,19 @@ in a humid temperate climate first, and generalised by hemisphere and grass clas
   water comes to — capped at what a controller can be set to, with the balance carrying the
   rest into tomorrow. A deep deficit on a lawn sown all over therefore arrives as more
   passes, not heavier ones.
+- **A lawn waters on one clock; a zone that needs less takes a shorter run.** Left to itself
+  each zone picks the count its own water comes to, so a zone a little drier than its
+  neighbour — or a little shaded, which is the same thing through the water balance — keeps
+  different hours for the whole fortnight. Four zones then mean four programmes and a
+  controller that is never off, which is a lawn turned into a job. So the zones of a lawn
+  agree: how often is the greatest any of them asked for, because a count is a floor under
+  how long the surface is left alone and the driest zone sets it; between which hours is the
+  narrowest they allow, the last to lose its dew and the first to start losing the light, so
+  no corner is watered wet and none is left wet after dark. What a zone needing less water
+  does with those hours is run for less time — its own day's water divided by the lawn's
+  count. The floor under a zone stays its own: the count says how often it waters, never how
+  much, or every zone is watered to the wettest one. A zone dark enough to pull the whole
+  lawn's window in is a zone that wants to be a lawn of its own, and the setup can say so.
 - **The times are one schedule, not one per zone.** Hosekeeper staggers the hours zone by
   zone only when it is opening the valves itself, because then two zones told eleven both get
   eleven and halve each other's pressure. Everywhere else the times are a schedule somebody

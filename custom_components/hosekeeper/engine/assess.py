@@ -343,6 +343,8 @@ def assess(
     plan_state: dict[str, Any],
     radiation_estimated: bool = False,
     soil_moisture_pct: float | None = None,
+    seedbed_passes_agreed: int | None = None,
+    seedbed_window_agreed: tuple[dt.time, dt.time] | None = None,
 ) -> Assessment:
     """Return the day's assessment, updating the diary's record for today as it goes."""
     key = today.isoformat()
@@ -477,6 +479,8 @@ def assess(
         longitude=lawn.longitude,
         utc_offset_h=lawn.utc_offset_h,
         dew_clear=dew_clear,
+        seedbed_passes_agreed=seedbed_passes_agreed,
+        seedbed_window_agreed=seedbed_window_agreed,
         rain_today_mm=record.get("rain_mm", 0.0),
         irrigation_today_mm=record.get("irrigation_mm", 0.0),
         can_convert_minutes=bool(lawn.application_rate_mm_h),
