@@ -331,6 +331,10 @@ def build(
                     "times": len(decided),
                     "mm": decided[0]["mm"],
                     "minutes": decided[0]["minutes"],
+                    # Recomputed, not carried: the agenda worked its total out from the count
+                    # it projected, and the plan that was actually settled may have landed on
+                    # a different one. Left alone, a five-pass day kept the four-pass total.
+                    "total_minutes": sum(int(cycle["minutes"]) for cycle in decided),
                 }
             else:
                 # A day still to be decided is laid out the way the morning will lay it out,

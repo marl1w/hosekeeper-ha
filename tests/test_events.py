@@ -77,6 +77,9 @@ def test_the_decided_day_keeps_the_same_shape() -> None:
         "times": 3,
         "mm": 2.0,
         "minutes": 4,
+        # The total is the decided day's own, not the one the agenda projected: the plan that
+        # was settled may have landed on a different count from the one the week expected.
+        "total_minutes": 12,
         "at": ["11:00", "14:00", "17:00"],
     }
 

@@ -153,8 +153,16 @@ check("now", () => renderNow(snapshots, { ...shared, selectedZone: null, onSelec
 // that says until when. Neither may fill the list with copies of itself.
 check("repeats are collapsed", () => {
   const seedbed = (merged.get(today) || []).filter((e) => e.code === "germination_watering");
-  if (seedbed.length !== 1) throw new Error(`${seedbed.length} seedbed lines on one day`);
-  if (!(seedbed[0].repeats >= 1)) throw new Error("the repeat count is missing");
+  if (!seedbed.length) throw new Error("the seedbed watering is not on the day at all");
+  if (!seedbed.every((e) => e.repeats >= 1)) throw new Error("the repeat count is missing");
+  // A day of light waterings is one line per lawn that is doing the same thing, never one
+  // line per pass: five passes collapse, and a lawn appears under exactly one of the lines.
+  const seen = seedbed.flatMap((e) => e.zones);
+  if (seen.length !== new Set(seen).size) throw new Error("a lawn is under two seedbed lines");
+  // What may not collapse is two lawns doing different work. Lines that survive apart have
+  // to differ in something a reader would act on, or the split is noise.
+  const shapes = seedbed.map((e) => JSON.stringify([e.params.at, e.params.mm, e.params.minutes]));
+  if (shapes.length !== new Set(shapes).size) throw new Error("two lines say the same thing");
   return renderDayDetail(today, merged.get(today) || [], shared);
 });
 

@@ -524,6 +524,32 @@ only then is the hour a command rather than a suggestion.
   a property of the week, not of one afternoon. As the user put it, the job is to take care
   of the lawn, not to make it a job.
 
+### What the shade broke downstream
+
+Zone 1 shading differently from its neighbours was the first time two zones of one lawn ever
+had different work on the same day, and two places had quietly been assuming they could not.
+
+- **The panel merged them into one line.** `signature()` keyed on the code and the product
+  and stopped there, so four zones stood under one line carrying the first zone's hours --
+  five passes from eleven shown for three zones that were on six from half past ten. The key
+  now carries the shape of the work as well: when it runs, how often, how much each time.
+  Depths stay out of it for a split run, whose parts are meant to add back together below.
+  Its own docstring had claimed "a different depth stays apart" all along, which the code had
+  never done.
+- **`total_minutes` was stale** whenever the settled plan landed on a different count from
+  the one the agenda projected: the decided branch rewrote the times, the depth and the run
+  length and left the total as the week had guessed it. A five-pass day kept a four-pass
+  total. Recomputed from the passes that were actually decided.
+
+The frontend fixture turned out to exercise this already -- its West lawn runs six passes of
+1.5 mm against the others' five of 2.0 -- so the test that asserted one seedbed line a day
+had been asserting the bug. It now checks what was meant: a lawn appears under exactly one
+line, and two lines that survive apart differ in something a reader would act on.
+
+Not fixed here, because it is not in this repo: the daily notification automation groups
+zones by job name and reports the first zone's times for the group, which has the same fault
+for the same reason.
+
 ### Still open
 
 - Shade is taken as one number for the zone, and the sun moves. A wall on the east side

@@ -57,8 +57,28 @@ function recordedByDay(snapshot) {
   return out;
 }
 
+/**
+ * What makes two lines the same line.
+ *
+ * The rule the merge is for is that the same job on several lawns is one job with several
+ * lawns against it — and the test of "the same job" is that a reader following the line
+ * would do the same thing on every lawn under it. So the shape of the work belongs in the
+ * key, not just its name: a zone wetted six times from half past ten is not doing the same
+ * job as one wetted five times from eleven, however alike the two read.
+ *
+ * This used to stop at the code and the product. Nothing showed, because every zone of a
+ * lawn was given identical passes and identical depths; the first zone to shade differently
+ * from its neighbours put five hours on a line that four zones were standing under, three of
+ * which were on six. A merge that hides the difference is worse than no merge, because the
+ * reader has no way to tell it happened.
+ *
+ * The depths stay out of the key for a split run. A watering divided into cycles is several
+ * parts of one job whose mm and minutes are meant to be added back together below, and
+ * keying on them would leave the parts sitting apart as though they were different work.
+ */
 function signature(event) {
   const params = event.params || {};
+  const split = params.of !== undefined;
   return [
     event.code,
     event.category,
@@ -69,6 +89,11 @@ function signature(event) {
     params.dose_g_m2 ?? "",
     params.status ?? "",
     params.issue ?? "",
+    // The shape of the work: when it runs, how often, and how much each time.
+    (params.at || []).join(","),
+    params.times ?? "",
+    split ? "" : (params.mm ?? ""),
+    split ? "" : (params.minutes ?? ""),
   ].join("|");
 }
 
