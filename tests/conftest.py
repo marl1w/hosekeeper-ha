@@ -47,7 +47,10 @@ def lawn_data() -> dict[str, Any]:
     """Return a lawn: where it is, what it is made of, and what waters it."""
     return {
         CONF_NAME: "The lawn",
-        CONF_LOCATION: {CONF_LATITUDE: 45.0, CONF_LONGITUDE: 9.0},
+        # Forty-five north, and a longitude in the time zone the test harness runs on. The
+        # engine places a seedbed's passes against sunrise, so a lawn whose coordinates and
+        # whose clock disagree is watered at an hour neither of them would recognise.
+        CONF_LOCATION: {CONF_LATITUDE: 45.0, CONF_LONGITUDE: -120.0},
         CONF_SOIL_TYPE: "loam",
         CONF_GRASS_TYPE: "tall_fescue",
         CONF_ESTABLISHMENT_METHOD: "sod",

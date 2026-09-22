@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from itertools import pairwise
 
 from custom_components.hosekeeper.engine.knowledge import programme
@@ -86,16 +87,64 @@ def test_chitted_seed_is_wetted_more_often_and_more_lightly_until_it_is_up() -> 
     # seedlings are up.
     assert chitted.daily_mm > programme.STANDARD_SEEDBED.daily_mm
 
-    # And what actually matters is the longest the surface is left alone: both regimes run
-    # from nine to five, and the chitted one never leaves a four-hour hole in the middle.
+    # And what actually matters is the longest the surface is left alone. Both regimes are
+    # spread across the same window -- the day the sun gives them -- so the one with more
+    # passes in it is the one that never leaves a four-hour hole in the middle.
+    window = programme.seedbed_window(dt.time(7, 20), dt.time(19, 24))
+
     def longest_gap(regime: programme.SeedbedRegime) -> int:
-        minutes = [t.hour * 60 + t.minute for t in regime.times]
+        times = programme.seedbed_times(regime.min_passes, window)
+        minutes = [t.hour * 60 + t.minute for t in times]
         return max(b - a for a, b in pairwise(minutes))
 
     assert longest_gap(chitted) < longest_gap(programme.STANDARD_SEEDBED)
     # Dark comes at the same hour whatever was sown: damping-off is the worse risk, not the
     # lesser one, on seed that is already open.
-    assert max(chitted.times) == max(programme.STANDARD_SEEDBED.times)
+    assert (
+        programme.seedbed_times(chitted.min_passes, window)[-1]
+        == programme.seedbed_times(programme.STANDARD_SEEDBED.min_passes, window)[-1]
+    )
+
+
+def test_a_seedbed_is_watered_against_the_sun_and_not_the_clock() -> None:
+    """Nine in the morning is right in June and waters wet grass in late September."""
+    june = programme.seedbed_window(dt.time(5, 43), dt.time(21, 20))
+    september = programme.seedbed_window(dt.time(7, 20), dt.time(19, 24))
+    assert june[0] < september[0], "the dew lifts later as the year turns"
+    assert june[1] > september[1], "and the light goes sooner"
+    # The first pass waits for the dew and the last leaves the leaf time to dry standing up.
+    assert september[0] == dt.time(10, 20)
+    assert september[1] == dt.time(16, 24)
+
+
+def test_a_short_day_keeps_the_dew_margin_and_gives_up_the_drying_one() -> None:
+    """In December there is no span left; a pass onto a wet leaf is the worse of the two."""
+    first, last = programme.seedbed_window(dt.time(8, 6), dt.time(16, 52))
+    assert first == dt.time(11, 6), "the dew margin is kept whole"
+    assert last > first, "and the day still has passes in it"
+    assert last <= dt.time(16, 52), "never after the sun has gone"
+
+
+def test_a_day_that_dries_faster_is_wetted_more_often() -> None:
+    """What kills a seedbed is the longest gap, and that follows the drying rate."""
+    ordinary = programme.STANDARD_SEEDBED
+    assert ordinary.passes_for(None) == ordinary.min_passes, "no weather, no opinion"
+    assert ordinary.passes_for(1.2) == 3, "a cool overcast day holds on three"
+    assert ordinary.passes_for(2.8) == 4
+    assert ordinary.passes_for(4.0) == 5
+    # Never more than a controller can be set to, however hot it gets.
+    assert ordinary.passes_for(12.0) == programme.SEEDBED_MAX_PASSES
+    assert programme.CHITTED_SEEDBED.passes_for(1.0) == 5, "chitted seed keeps its floor"
+
+
+def test_more_passes_means_lighter_ones_but_never_too_light_to_wet_anything() -> None:
+    """The day's water divided further, down to the point a pass only damps the leaf."""
+    hot = programme.seedbed_passes(programme.STANDARD_SEEDBED, 6.0, 6.0, passes=6)
+    assert len(hot) == 6
+    assert all(mm >= programme.SEEDBED_MIN_PASS_MM for mm in hot)
+    assert sum(hot) <= 6.0 + 0.6, "the day's water, not six times the ordinary pass"
+    # A day that owes almost nothing gets fewer, proper passes rather than six token ones.
+    assert len(programme.seedbed_passes(programme.STANDARD_SEEDBED, 1.0, 6.0, passes=6)) <= 1
 
 
 def test_once_the_seedlings_are_up_chitted_seed_is_on_the_ordinary_regime() -> None:
@@ -107,3 +156,83 @@ def test_once_the_seedlings_are_up_chitted_seed_is_on_the_ordinary_regime() -> N
     assert programme.seedbed_regime(pre_germinated=False, days_since_sowing=1) is (
         programme.STANDARD_SEEDBED
     )
+
+
+def test_the_passes_land_on_the_half_hour_so_a_controller_can_be_set_to_them() -> None:
+    """These times are typed in by hand; a schedule that drifts is one nobody keeps."""
+    window = programme.seedbed_window(dt.time(7, 20), dt.time(19, 24))
+    times = programme.seedbed_times(4, window)
+    assert all(at.minute in (0, 30) for at in times)
+    # Inward at both ends: never before the dew has lifted, never past the drying margin.
+    assert times[0] >= window[0]
+    assert times[-1] <= window[1]
+
+
+def test_a_schedule_does_not_move_because_the_sun_did() -> None:
+    """Consecutive days land on the same times, which is the whole point of the grid."""
+    monday = programme.seedbed_window(dt.time(7, 20), dt.time(19, 24))
+    tuesday = programme.seedbed_window(dt.time(7, 21), dt.time(19, 22))
+    assert programme.seedbed_times(4, monday) == programme.seedbed_times(4, tuesday)
+
+
+def test_a_window_with_too_few_half_hours_gets_the_passes_it_has_room_for() -> None:
+    """Two runs in one slot are one run; the water goes in fewer, heavier passes."""
+    narrow = (dt.time(11, 0), dt.time(12, 0))
+    assert len(programme.seedbed_times(6, narrow)) == 3
+    assert programme.seedbed_times(6, narrow) == (dt.time(11, 0), dt.time(11, 30), dt.time(12, 0))
+
+
+def test_the_lawns_own_humidity_outranks_the_three_hour_rule_of_thumb() -> None:
+    """A hygrometer on the lawn knows when the dew went; the constant only guesses."""
+    sunrise, sunset = dt.time(7, 20), dt.time(19, 24)
+    assumed = programme.seedbed_window(sunrise, sunset)
+    assert assumed[0] == dt.time(10, 20), "three hours after sunrise, with nothing observed"
+
+    # A lawn that dries early is watered earlier, and one that holds its dew later.
+    early = programme.seedbed_window(sunrise, sunset, dt.time(9, 15))
+    late = programme.seedbed_window(sunrise, sunset, dt.time(11, 30))
+    assert early[0] == dt.time(9, 15)
+    assert late[0] == dt.time(11, 30)
+
+
+def test_an_observed_hour_is_still_held_to_what_a_canopy_can_actually_do() -> None:
+    """One reading from a hygrometer in a hedge does not get to set the whole day."""
+    sunrise, sunset = dt.time(7, 20), dt.time(19, 24)
+    # Nothing dries in the first few minutes of daylight, whatever the sensor says.
+    assert programme.seedbed_window(sunrise, sunset, dt.time(7, 25))[0] == dt.time(8, 20)
+    # And a morning that never dried does not push the first pass into the afternoon.
+    assert programme.seedbed_window(sunrise, sunset, dt.time(16, 0))[0] == dt.time(13, 20)
+
+
+def test_a_shaded_zone_dries_later_and_stops_drying_sooner() -> None:
+    """The same hours of daylight, fewer of them with any drying power in them."""
+    sunrise, sunset = dt.time(7, 20), dt.time(19, 24)
+    open_ground = programme.seedbed_window(sunrise, sunset)
+    shaded = programme.seedbed_window(sunrise, sunset, shaded_fraction=0.3)
+    assert shaded[0] > open_ground[0], "dew holds on under a wall"
+    assert shaded[1] < open_ground[1], "and the drying stops sooner in the evening"
+    # Proportional, so a zone with a corner in shadow is not treated as a wood.
+    full = programme.seedbed_window(sunrise, sunset, shaded_fraction=1.0)
+    assert _minutes(full[0]) - _minutes(open_ground[0]) > _minutes(shaded[0]) - _minutes(
+        open_ground[0]
+    )
+
+
+def test_shade_moves_an_observed_hour_too_because_the_station_stands_in_the_open() -> None:
+    """The hygrometer reports when open ground dried, not when the shaded corner did."""
+    sunrise, sunset = dt.time(7, 20), dt.time(19, 24)
+    observed = dt.time(9, 40)
+    assert programme.seedbed_window(sunrise, sunset, observed)[0] == observed
+    shaded = programme.seedbed_window(sunrise, sunset, observed, shaded_fraction=0.3)
+    assert shaded[0] == dt.time(10, 7)
+
+
+def test_deep_shade_on_a_short_day_still_leaves_a_window_to_water_in() -> None:
+    """Both margins widening can close the day; the seedbed still has to be wetted."""
+    first, last = programme.seedbed_window(dt.time(8, 6), dt.time(16, 52), shaded_fraction=1.0)
+    assert last > first
+    assert last <= dt.time(16, 52), "never after the sun has gone"
+
+
+def _minutes(at: dt.time) -> int:
+    return at.hour * 60 + at.minute

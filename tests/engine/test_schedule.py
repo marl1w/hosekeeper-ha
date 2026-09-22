@@ -8,6 +8,7 @@ from custom_components.hosekeeper.engine import schedule
 from custom_components.hosekeeper.engine.knowledge import programme
 
 TZ = dt.timezone(dt.timedelta(hours=2))
+WINDOW = programme.seedbed_window(dt.time(7, 20), dt.time(19, 24))
 SUNRISE = dt.datetime(2026, 9, 7, 6, 58, tzinfo=TZ)
 
 
@@ -250,10 +251,13 @@ def test_a_chitted_seedbed_gets_more_passes_and_lighter_ones() -> None:
         germinating=True,
         seedbed=programme.CHITTED_SEEDBED,
         seedbed_depths=[programme.CHITTED_SEEDBED.mm] * programme.CHITTED_SEEDBED.passes,
+        seedbed_window=WINDOW,
     )
-    assert [c.start.time() for c in plan.germination] == list(programme.CHITTED_SEEDBED.times)
+    assert [c.start.time() for c in plan.germination] == list(
+        programme.seedbed_times(programme.CHITTED_SEEDBED.min_passes, WINDOW)
+    )
     assert all(c.mm == programme.CHITTED_SEEDBED.mm for c in plan.germination)
-    assert len(plan.germination) > len(programme.STANDARD_SEEDBED.times)
+    assert len(plan.germination) > programme.STANDARD_SEEDBED.min_passes
     # The leaf still has to dry before dark, and the deep cycle the surrounding turf needs
     # is untouched by any of it.
     assert plan.germination[-1].end.time() < dt.time(18, 0)

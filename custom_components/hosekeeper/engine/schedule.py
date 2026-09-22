@@ -46,8 +46,16 @@ MAX_CYCLES = 4
 # last one is early enough that the leaf dries before dark, whichever regime is running,
 # because a seedbed wet all night grows damping-off rather than grass.
 STANDARD_SEEDBED = programme.STANDARD_SEEDBED
-GERMINATION_TIMES = STANDARD_SEEDBED.times
 GERMINATION_MM = STANDARD_SEEDBED.mm
+
+# The window a seedbed's passes are spread across, for a caller that has no sun to hand.
+# Real days come with their own, worked out from the lawn's latitude and the date; this is
+# the midsummer shape of it, kept so a bare call still lands somewhere sensible.
+GERMINATION_WINDOW = (dt.time(9, 0), dt.time(17, 0))
+
+# The same window at the ordinary count, for a caller that needs hours and has neither a
+# decided plan nor a day to work them out from.
+GERMINATION_TIMES = programme.seedbed_times(STANDARD_SEEDBED.min_passes, GERMINATION_WINDOW)
 
 # When a watering already decided is worth deciding again.
 #
@@ -262,6 +270,7 @@ def irrigation_plan(
     seedbed: programme.SeedbedRegime = STANDARD_SEEDBED,
     seedbed_whole_zone: bool = False,
     seedbed_depths: Sequence[float] = (),
+    seedbed_window: tuple[dt.time, dt.time] = GERMINATION_WINDOW,
 ) -> IrrigationPlan:
     """Return the plan for the dawn that ends at `sunrise`, or the day a seedbed asks for.
 
@@ -317,7 +326,13 @@ def irrigation_plan(
 
     germination = (
         germination_cycles(
-            date, sunrise.tzinfo, minutes_per_mm, germination_offset, seedbed, seedbed_depths
+            date,
+            sunrise.tzinfo,
+            minutes_per_mm,
+            germination_offset,
+            seedbed,
+            seedbed_depths,
+            seedbed_window,
         )
         if germinating
         else ()
@@ -372,6 +387,7 @@ def with_germination(
     offset: dt.timedelta = dt.timedelta(),
     regime: programme.SeedbedRegime = STANDARD_SEEDBED,
     depths: Sequence[float] = (),
+    window: tuple[dt.time, dt.time] = GERMINATION_WINDOW,
     *,
     whole_zone: bool = False,
 ) -> IrrigationPlan:
@@ -389,7 +405,7 @@ def with_germination(
     """
     if plan.germination:
         return plan
-    cycles = germination_cycles(plan.date, tzinfo, minutes_per_mm, offset, regime, depths)
+    cycles = germination_cycles(plan.date, tzinfo, minutes_per_mm, offset, regime, depths, window)
     if not cycles:
         return plan
     reasons = (*plan.reasons, *seedbed_reasons(regime))
@@ -476,6 +492,7 @@ def germination_cycles(
     offset: dt.timedelta = dt.timedelta(),
     regime: programme.SeedbedRegime = STANDARD_SEEDBED,
     depths: Sequence[float] = (),
+    window: tuple[dt.time, dt.time] = GERMINATION_WINDOW,
 ) -> tuple[Cycle, ...]:
     """Return the day's waterings over a sown lawn, and how deep each one goes.
 
@@ -484,16 +501,24 @@ def germination_cycles(
     second and third get whatever pressure is left, or nothing at all.
 
     `regime` is how often the seedbed is wetted: the ordinary three passes, or the five
-    lighter ones chitted seed needs while its radicle has no root to fall back on. `depths`
-    is what the day actually owes, worked out where the rain and the balance are known, and
-    it may be shorter than the regime -- rain takes passes off the day. The ones that stay
-    are the regime's later hours, because the surface is wettest in the morning, from dew
-    and from whatever fell overnight, and driest by the end of the afternoon.
+    lighter ones chitted seed needs while its radicle has no root to fall back on -- and more
+    of either on a day with the drying power to ask for them. `depths` is what the day
+    actually owes, worked out where the rain and the balance are known.
+
+    `window` is the part of the day the passes may run in, which hangs off sunrise and sunset
+    rather than the clock: a pass before the dew has lifted waters water, and one late enough
+    to leave the leaf wet after dark grows damping-off. The passes are spread evenly across
+    it, because what a seedbed suffers from is the longest gap between two of them.
+
+    Fewer depths than the window was divided for means rain has taken passes off the day. The
+    ones that stay are the later hours, because the surface is wettest in the morning, from
+    dew and from whatever fell overnight, and driest by the end of the afternoon.
     """
     if not depths:
         return ()
+    hours = programme.seedbed_times(len(depths), window)
     out = []
-    for at, mm in zip(regime.times[-len(depths) :], depths, strict=True):
+    for at, mm in zip(hours, depths, strict=True):
         start = dt.datetime.combine(date, at, tzinfo=tzinfo) + offset
         minutes = max(1, round(mm * minutes_per_mm)) if minutes_per_mm else 3
         out.append(Cycle(start, start + dt.timedelta(minutes=minutes), mm))

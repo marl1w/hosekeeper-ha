@@ -9,11 +9,16 @@ the paper (Example 18 for Penman-Monteith, Example 20 for Hargreaves).
 from __future__ import annotations
 
 from dataclasses import dataclass
+import datetime as dt
 import math
 
 SOLAR_CONSTANT = 0.0820  # MJ m⁻² min⁻¹
 STEFAN_BOLTZMANN = 4.903e-9  # MJ K⁻⁴ m⁻² day⁻¹
 ALBEDO_GRASS = 0.23
+
+# Where the sun is said to rise: the centre of the disc 0.833 degrees below the true
+# horizon, which is its own 16 arcminute radius plus 34 of atmospheric refraction.
+SUNRISE_ZENITH = math.radians(-0.833)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +80,55 @@ def daylight_hours(latitude_deg: float, day_of_year: int) -> float:
     """Return N, eq. 34."""
     ws = sunset_hour_angle(math.radians(latitude_deg), solar_declination(day_of_year))
     return 24 / math.pi * ws
+
+
+def equation_of_time(day_of_year: int) -> float:
+    """Return the difference between solar and clock time, in minutes.
+
+    The earth's orbit is an ellipse and its axis is tilted, so the sun does not cross the
+    meridian at the same moment every day: it runs up to a quarter of an hour fast in
+    November and a quarter slow in February. Spencer's approximation, good to well under a
+    minute, which is finer than any watering schedule cares about.
+    """
+    b = 2 * math.pi * (day_of_year - 81) / 364
+    return 9.87 * math.sin(2 * b) - 7.53 * math.cos(b) - 1.5 * math.sin(b)
+
+
+def sun_times(
+    latitude_deg: float, longitude_deg: float, day_of_year: int, utc_offset_h: float
+) -> tuple[dt.time, dt.time]:
+    """Return sunrise and sunset as local clock times.
+
+    The same declination and hour angle the radiation terms are built on, turned into a time
+    of day: solar noon is midday corrected for how far the place sits from its zone's
+    meridian and for the equation of time, and the sun is up for half the hour angle either
+    side of it. The horizon is taken at the standard -0.833 degrees rather than geometrically:
+    the disc has a radius of about 16 arcminutes and the atmosphere refracts the last 34 on
+    top of that, which is what puts sunrise some seven minutes earlier than the geometry
+    alone would have it at these latitudes. Almanacs, and Home Assistant's own sun
+    integration, use the same figure.
+
+    Inside the polar circles there is no crossing to find; the day is then reported as the
+    whole of it, which is what a lawn at that latitude experiences.
+    """
+    phi = math.radians(latitude_deg)
+    delta = solar_declination(day_of_year)
+    cos_ws = (math.sin(SUNRISE_ZENITH) - math.sin(phi) * math.sin(delta)) / (
+        math.cos(phi) * math.cos(delta)
+    )
+    if cos_ws <= -1:
+        return dt.time(0, 0), dt.time(23, 59)
+    if cos_ws >= 1:
+        return dt.time(12, 0), dt.time(12, 0)
+    half_day_h = math.degrees(math.acos(cos_ws)) / 15.0
+    noon_h = 12.0 - longitude_deg / 15.0 - equation_of_time(day_of_year) / 60.0 + utc_offset_h
+    return _clock(noon_h - half_day_h), _clock(noon_h + half_day_h)
+
+
+def _clock(hours: float) -> dt.time:
+    """Return an hour of the day, as a time, clamped into the day it belongs to."""
+    minutes = max(0, min(24 * 60 - 1, round(hours * 60)))
+    return dt.time(minutes // 60, minutes % 60)
 
 
 def clear_sky_radiation(ra: float, elevation_m: float) -> float:

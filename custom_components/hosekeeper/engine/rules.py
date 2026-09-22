@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import datetime as dt
 from typing import Any
 
-from . import disease, nutrition, water
+from . import disease, et, nutrition, water
 from .climate import Anomalies, ForecastSkill
 from .knowledge import programme
 from .phenology import Phenology
@@ -105,6 +105,27 @@ class Context:
     feed_factor: float = 1.0
     soil_moisture_pct: float | None = None
 
+    et0_today_mm: float | None = None
+    """Reference evapotranspiration today: the rate a wet surface loses water.
+
+    The crop figure beside it is what the lawn used, canopy and all. What dries a seedbed is
+    the reference one, because a seedbed has no canopy to speak of yet.
+    """
+    latitude: float = 0.0
+    longitude: float = 0.0
+    utc_offset_h: float = 0.0
+    dew_clear: dt.time | None = None
+    """The hour this lawn's own humidity says the leaf usually dries, when it has been read.
+
+    None falls back to the three hours after sunrise a clear morning takes at a middle
+    latitude, which is the best a lawn with no hygrometer on it can be given.
+    """
+    """Where and when the lawn is, so the hour the sun rises can be worked out for any day.
+
+    A seedbed's passes are placed against the sun rather than the clock, and the clock the
+    sun keeps is a matter of longitude and of which zone the place was put in.
+    """
+
     forecast_rain_tomorrow_mm: float | None = None
     """Rain forecast for tomorrow alone.
 
@@ -172,6 +193,26 @@ class Context:
             return False
         age_at_sowing = self.establishment_age_days - self.days_since_sowing
         return age_at_sowing >= programme.SEED_ESTABLISHED_DAYS
+
+    def sun(self, date: dt.date | None = None) -> tuple[dt.time, dt.time]:
+        """Return sunrise and sunset for a day at this lawn, as local clock times."""
+        day = date or self.today
+        return et.sun_times(
+            self.latitude, self.longitude, day.timetuple().tm_yday, self.utc_offset_h
+        )
+
+    def seedbed_window(self, date: dt.date | None = None) -> tuple[dt.time, dt.time]:
+        """Return the first and last hour a seedbed may be watered on a day."""
+        return programme.seedbed_window(*self.sun(date), self.dew_clear, self.shaded_fraction)
+
+    def seedbed_hours(self, count: int, date: dt.date | None = None) -> tuple[dt.time, ...]:
+        """Return the hours `count` passes run at on a day, spread across its window."""
+        return programme.seedbed_times(count, self.seedbed_window(date))
+
+    @property
+    def seedbed_passes_today(self) -> int:
+        """Return how many passes today's drying power asks the seedbed for."""
+        return self.seedbed.passes_for(self.et0_today_mm)
 
     @property
     def seedbed(self) -> programme.SeedbedRegime:
@@ -242,7 +283,9 @@ class Context:
             return []
         regime = self.seedbed
         cap = water.max_seedbed_application(self.soil_type)
-        depths = programme.seedbed_passes(regime, self.seedbed_target_mm, cap)
+        depths = programme.seedbed_passes(
+            regime, self.seedbed_target_mm, cap, passes=self.seedbed_passes_today
+        )
         if depths:
             return depths
         if self.seedbed_rain_mm >= programme.SEEDBED_SOAKING_MM:

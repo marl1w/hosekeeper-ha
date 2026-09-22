@@ -8,6 +8,7 @@ from typing import Any
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.helpers.sun import get_astral_event_date
 from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
@@ -21,7 +22,8 @@ from custom_components.hosekeeper.const import (
     CONF_WIND_SENSOR,
     DOMAIN,
 )
-from custom_components.hosekeeper.engine import schedule
+from custom_components.hosekeeper.engine import et, schedule
+from custom_components.hosekeeper.engine.knowledge import programme
 from tests.conftest import make_entry, only_zone, split
 
 RAIN = "sensor.weather_station_rain"
@@ -104,6 +106,19 @@ def station(hass: HomeAssistant) -> None:
     hass.states.async_set(SOLAR, "500", {"unit_of_measurement": "W/m²"})
     hass.states.async_set(VALVE, "off")
     hass.states.async_set(MOWER, "docked")
+
+
+def seedbed_window(date: dt.date) -> tuple[dt.time, dt.time]:
+    """Return the hours a seedbed's passes run between on the fixtures' lawn.
+
+    The engine hangs them off that date's sunrise and sunset rather than the clock, so a
+    test that wants to know when a pass runs has to ask the sun the same question.
+    """
+    offset = dt_util.now().utcoffset()
+    sunrise, sunset = et.sun_times(
+        45.0, -120.0, date.timetuple().tm_yday, offset.total_seconds() / 3600 if offset else 0.0
+    )
+    return programme.seedbed_window(sunrise, sunset)
 
 
 async def _setup(hass: HomeAssistant, field_data: dict[str, Any]) -> MockConfigEntry:
@@ -578,8 +593,16 @@ async def test_seed_sown_today_is_watered_today(
     await hass.async_block_till_done()
 
     passes = zone.coordinator.data.irrigation_plan.get("germination") or []
-    assert len(passes) == len(schedule.GERMINATION_TIMES)
-    assert passes[0]["mm"] == pytest.approx(schedule.GERMINATION_MM)
+    assert len(passes) >= programme.STANDARD_SEEDBED.min_passes
+    # Inside the day the sun gives that date, not against a clock: the first waits for the
+    # dew to lift and the last leaves the leaf time to dry standing up.
+    plan = zone.coordinator.data.irrigation_plan
+    window = seedbed_window(dt.date.fromisoformat(plan["date"]))
+    hours = programme.seedbed_times(len(passes), window)
+    assert passes[0]["start"][11:16] == hours[0].strftime("%H:%M")
+    assert passes[-1]["start"][11:16] == hours[-1].strftime("%H:%M")
+    # On the half hour, because these are typed into a controller by hand.
+    assert all(run["start"][14:16] in ("00", "30") for run in passes)
 
 
 @pytest.mark.usefixtures("weather_service", "station")
@@ -638,7 +661,11 @@ async def test_a_lawn_watered_by_hand_is_given_no_queue(
         [c["start"][11:16] for c in each.coordinator.data.irrigation_plan["germination"]]
         for each in zones
     ]
-    assert hours[0] == hours[1] == ["09:00", "13:00", "17:00"]
+    window = seedbed_window(
+        dt.date.fromisoformat(zones[0].coordinator.data.irrigation_plan["date"])
+    )
+    expected = [at.strftime("%H:%M") for at in programme.seedbed_times(len(hours[0]), window)]
+    assert hours[0] == hours[1] == expected
     assert all(each.coordinator.data.seedbed_queue_min == 0 for each in zones)
 
 
@@ -917,13 +944,14 @@ async def test_pre_germinated_seed_gets_the_tighter_schedule_through_the_service
     await _settle(hass, freezer)
 
     runs = only_zone(entry).coordinator.data.irrigation_plan.get("germination") or []
-    assert len(runs) == 5, "chitted seed is wetted five times, not three"
+    assert len(runs) >= programme.CHITTED_SEEDBED.min_passes, (
+        "chitted seed is wetted five times at least, not three"
+    )
+    window = seedbed_window(
+        dt.date.fromisoformat(only_zone(entry).coordinator.data.irrigation_plan["date"])
+    )
     assert [run["start"][11:16] for run in runs] == [
-        "09:00",
-        "11:00",
-        "13:00",
-        "15:00",
-        "17:00",
+        at.strftime("%H:%M") for at in programme.seedbed_times(len(runs), window)
     ]
     # And the sensor says what the lawn is being given, rather than what a dawn cycle the
     # day does not have would have been.
@@ -963,7 +991,11 @@ async def test_a_plan_made_before_the_sowing_is_reshaped_not_kept(
 
     plan = zone.coordinator.data.irrigation_plan
     assert "seedbed_day_replaces_dawn_cycle" in plan["reasons"], "the plan was not rebuilt"
-    assert [run["start"][11:16] for run in plan["germination"]] == ["09:00", "13:00", "17:00"]
+    window = seedbed_window(dt.date.fromisoformat(plan["date"]))
+    runs = plan["germination"]
+    assert [run["start"][11:16] for run in runs] == [
+        at.strftime("%H:%M") for at in programme.seedbed_times(len(runs), window)
+    ]
 
 
 @pytest.mark.usefixtures("weather_service", "station")
@@ -1081,3 +1113,45 @@ async def test_the_day_keeps_the_lines_it_carried(
     stale["asked"] = [{"date": "2026-01-05", "code": "mow", "category": "mowing", "params": {}}]
     await zone.coordinator.async_refresh()
     assert "asked" not in stale
+
+
+@pytest.mark.usefixtures("weather_service", "station")
+async def test_the_morning_the_humidity_falls_is_written_down_as_the_dew_going(
+    hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
+) -> None:
+    """A seedbed's first pass waits for the dew, and the hygrometer knows when it went.
+
+    Three hours after sunrise is a rule of thumb for a clear morning. A lawn with a
+    humidity sensor on it can be asked instead, so the hour it crosses the threshold is
+    kept on the day's page for the engine to read a habit off.
+    """
+    entry = await _setup(hass, field_data)
+    zone = only_zone(entry)
+    sunrise = dt_util.as_local(
+        get_astral_event_date(hass, "sunrise", dt_util.now().date()) or dt_util.now()
+    )
+
+    # Still wet an hour after the sun is up: nothing is recorded.
+    freezer.move_to(sunrise + dt.timedelta(hours=1))
+    hass.states.async_set(RH, "92", {"unit_of_measurement": "%"})
+    await zone.coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert "dew_clear_min" not in (zone.diary.today().get("obs") or {})
+
+    # Two hours later it has dried, and that is the hour that is kept.
+    dried_at = sunrise + dt.timedelta(hours=3)
+    freezer.move_to(dried_at)
+    hass.states.async_set(RH, "55", {"unit_of_measurement": "%"})
+    await zone.coordinator.async_refresh()
+    await hass.async_block_till_done()
+    obs = zone.diary.today().get("obs") or {}
+    assert obs.get("dew_clear_min") == dried_at.hour * 60 + dried_at.minute
+
+    # The first crossing of the morning is the one that counts, not the last.
+    freezer.move_to(sunrise + dt.timedelta(hours=4))
+    hass.states.async_set(RH, "30", {"unit_of_measurement": "%"})
+    await zone.coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert (zone.diary.today().get("obs") or {})["dew_clear_min"] == (
+        dried_at.hour * 60 + dried_at.minute
+    )

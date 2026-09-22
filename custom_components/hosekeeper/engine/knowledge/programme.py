@@ -331,41 +331,201 @@ SEED_ESTABLISHED_DAYS = 60
 PRE_GERMINATED_CRITICAL_DAYS = 5
 
 
+# How many passes a day's drying power asks for.
+#
+# Reference evapotranspiration is the rate the surface loses water, so it is what the number
+# of passes follows: the base is the demand three passes comfortably hold, and every further
+# millimetre of it buys one more, up to what a controller can be set to. Six start times per
+# programme is the common limit on domestic controllers (Hunter, Rain Bird, Gardena), and it
+# is also about the point past which the passes are too light to wet anything.
+SEEDBED_ET0_BASE_MM = 1.5
+SEEDBED_ET0_PER_PASS_MM = 1.0
+SEEDBED_MAX_PASSES = 6
+
+
 @dataclass(frozen=True, slots=True)
 class SeedbedRegime:
     """How often a seedbed is wetted through the day, and how much goes on each time."""
 
     code: str
-    times: tuple[dt.time, ...]
+    min_passes: int
+    """The fewest passes that hold a surface damp, on a day with little drying power."""
     mm: float
+
+    def passes_for(self, et0_mm: float | None) -> int:
+        """Return how many passes today asks for, given the day's drying power.
+
+        A seedbed is not lost to the day's total evaporation; it is lost to the longest gap
+        between two waterings. So the count follows the rate the surface dries at, and the
+        depth of each follows from the day's total divided among them. On a cool, overcast
+        day three passes hold the top centimetre; on a hot bright one the same water in three
+        goes to the air between them and the surface is dry by mid-afternoon, whatever the
+        daily total says.
+
+        The curve is deliberately cautious. A pass too many costs a few minutes of water; a
+        surface allowed to dry once costs the sowing, and the loss is not symmetrical.
+        """
+        if et0_mm is None:
+            return self.min_passes
+        over = max(0.0, et0_mm - SEEDBED_ET0_BASE_MM)
+        return min(SEEDBED_MAX_PASSES, self.min_passes + int(over // SEEDBED_ET0_PER_PASS_MM))
 
     @property
     def passes(self) -> int:
-        """Return how many times a day the seedbed is wetted."""
-        return len(self.times)
+        """Return the fewest passes the regime runs, for a day whose weather is not known."""
+        return self.min_passes
 
     @property
     def daily_mm(self) -> float:
         """Return the depth the day's passes put on the surface between them."""
-        return round(self.passes * self.mm, 1)
+        return round(self.min_passes * self.mm, 1)
 
 
-# The ordinary seedbed: three passes across the working day, the first once the dew has gone
-# and the last early enough that the leaf dries before dark, because a seedbed wet all night
-# grows damping-off rather than grass. They are spread rather than bunched into the afternoon
-# because between them they are the day's whole watering on a lawn that has been sown: the
-# morning is a third of the day the surface has to survive.
-STANDARD_SEEDBED = SeedbedRegime("standard", (dt.time(9, 0), dt.time(13, 0), dt.time(17, 0)), 2.0)
+# The ordinary seedbed: three passes at least, across the part of the day that dries, the
+# first once the dew has gone and the last early enough that the leaf dries before dark,
+# because a seedbed wet all night grows damping-off rather than grass. They are spread rather
+# than bunched into the afternoon because between them they are the day's whole watering on a
+# lawn that has been sown: the morning is a third of the day the surface has to survive.
+STANDARD_SEEDBED = SeedbedRegime("standard", 3, 2.0)
 
-# The chitted seedbed: five lighter passes over the same span, starting in the morning. The
-# same water in a day, spread so the top centimetre never gets the two hours it needs to dry
-# out, and the last pass no later -- damping-off is a worse risk on chitted seed, not a
-# lesser one.
-CHITTED_SEEDBED = SeedbedRegime(
-    "chitted",
-    (dt.time(9, 0), dt.time(11, 0), dt.time(13, 0), dt.time(15, 0), dt.time(17, 0)),
-    1.5,
-)
+# The chitted seedbed: five lighter passes at least, over the same span. The same water in a
+# day, spread so the top centimetre never gets the two hours it needs to dry out, and the
+# last pass no later -- damping-off is a worse risk on chitted seed, not a lesser one.
+CHITTED_SEEDBED = SeedbedRegime("chitted", 5, 1.5)
+
+
+# Where the passes sit in the day, which is a question about the sun and not about the clock.
+#
+# The times used to be fixed at nine, one and five. That is right for midsummer and wrong for
+# the seeding months at either end of it: in late September at 45 degrees the sun is not up
+# until twenty past seven, the dew is still on the leaf at nine, and a pass then waters water
+# -- it adds nothing to the soil and adds an hour to the leaf wetness that drives dollar spot
+# and damping-off. The window therefore hangs off sunrise and sunset, and moves through the
+# season with them.
+#
+# The first pass waits for the dew to lift, which is roughly three hours after sunrise on a
+# clear morning. The last finishes far enough before sunset that the canopy dries standing
+# up: three hours, the figure extension guidance uses for evening irrigation cut-offs.
+SEEDBED_AFTER_SUNRISE = dt.timedelta(hours=3)
+SEEDBED_BEFORE_SUNSET = dt.timedelta(hours=3)
+
+# Three hours is a clear morning at a middle latitude, and a lawn with a hygrometer on it
+# need not be guessed at. Relative humidity is the surrogate the disease models already use
+# for leaf wetness -- Smith-Kerns is built on it -- and 80 % is where the leaf is taken to
+# have dried. So when the lawn's own humidity has been watched through a morning, the hour
+# it crossed is the hour the dew lifted, and it replaces the rule of thumb.
+#
+# Within limits, because one morning is not a habit and a hygrometer in a hedge is not a
+# lawn. The observed hour is never taken earlier than an hour after sunrise, which is about
+# the soonest a real canopy dries, nor later than solar noon, past which the morning is gone
+# and a seedbed that has waited that long has waited too long.
+SEEDBED_DEW_RH_PCT = 80.0
+SEEDBED_DEW_EARLIEST = dt.timedelta(hours=1)
+SEEDBED_DEW_LATEST = dt.timedelta(hours=6)
+
+# What shade does to the two margins.
+#
+# Dew burns off when the sun reaches the leaf, so a zone under a wall or a canopy keeps its
+# for longer in the morning and stops drying earlier in the evening -- the same hours of
+# daylight, fewer of them with any drying power in them. Both margins therefore widen with
+# the shaded fraction, an hour and a half at full shade, which is about the difference
+# turfgrass shade trials report between a north wall and open ground in autumn.
+#
+# It is applied to the observed hour as well as to the assumed one, because a weather
+# station stands in the open by definition: what it reports is when open ground dried, and
+# the shaded part of a zone is still wet when it did. A lawn whose hygrometer sits in the
+# shade will be watered a little late for it, which is the safer of the two errors.
+SEEDBED_SHADE_DELAY = dt.timedelta(minutes=90)
+
+
+def seedbed_window(
+    sunrise: dt.time,
+    sunset: dt.time,
+    dew_clear: dt.time | None = None,
+    shaded_fraction: float = 0.0,
+) -> tuple[dt.time, dt.time]:
+    """Return the first and last hour a seedbed's passes may run on a day with this sun.
+
+    `dew_clear` is the hour the lawn's own humidity says the leaf dried, averaged over the
+    mornings there are records for. Given one, it stands in for the three-hour rule of thumb.
+    `shaded_fraction` then pushes both margins in, because shaded turf dries later and stops
+    drying sooner; the result is clamped to the span a canopy plausibly dries in.
+    """
+    day = dt.date(2000, 1, 1)
+    up = dt.datetime.combine(day, sunrise)
+    shade = SEEDBED_SHADE_DELAY * max(0.0, min(1.0, shaded_fraction))
+    first = up + SEEDBED_AFTER_SUNRISE + shade
+    if dew_clear is not None:
+        first = dt.datetime.combine(day, dew_clear) + shade
+    first = min(max(first, up + SEEDBED_DEW_EARLIEST), up + SEEDBED_DEW_LATEST)
+    last = dt.datetime.combine(day, sunset) - SEEDBED_BEFORE_SUNSET - shade
+    if last - first < SEEDBED_MIN_SPAN:
+        # Short days, or deep shade: give up the drying margin before the dew margin, because
+        # a pass onto a wet leaf is wasted outright while one a little late merely dries a
+        # little slower.
+        last = min(first + SEEDBED_MIN_SPAN, dt.datetime.combine(day, sunset))
+    return first.time(), last.time()
+
+
+# What is left when the days are too short for that to be true at both ends. Deep in the
+# autumn window the useful span closes to nothing, and the seedbed still has to be wetted;
+# the dew matters more than the drying then, because there is little drying left to do.
+SEEDBED_MIN_SPAN = dt.timedelta(hours=2)
+
+
+# The grid the passes are put on.
+#
+# A seedbed's window moves a minute or two a day, and a schedule that moves with it is a
+# schedule nobody can keep: these times are typed into a controller by hand, and "10:18
+# today, 10:20 tomorrow" is a job no one will do twice. So the passes land on the half hour,
+# which is coarse enough to stay put for weeks at a time and fine enough to divide any
+# window a seedbed is watered in.
+#
+# Both ends round inward, never outward: the first pass to the half hour at or after the dew
+# has lifted, the last to the one at or before the drying margin closes. Rounding the other
+# way would spend the margin that was the point of the window.
+SEEDBED_SLOT_MINUTES = 30
+
+
+def _slot(at: dt.time, *, up: bool) -> int:
+    """Return the half-hour slot at or after `at`, or at or before it."""
+    minutes = at.hour * 60 + at.minute
+    if up:
+        return -(-minutes // SEEDBED_SLOT_MINUTES)
+    return minutes // SEEDBED_SLOT_MINUTES
+
+
+def _at_slot(slot: int) -> dt.time:
+    """Return the time a half-hour slot stands for."""
+    minutes = min(slot * SEEDBED_SLOT_MINUTES, 24 * 60 - 1)
+    return dt.time(minutes // 60, minutes % 60)
+
+
+def seedbed_times(count: int, window: tuple[dt.time, dt.time]) -> tuple[dt.time, ...]:
+    """Return `count` pass times spread evenly across the window, on the half hour.
+
+    Evenly, because what the seedbed cares about is the longest gap between two waterings,
+    and even spacing is what makes the longest gap as short as the count allows. On the half
+    hour, because the times are kept by hand and a schedule that drifts with the sunrise is
+    one nobody will keep up with.
+
+    A window with fewer half hours in it than the day asked for passes gets the passes it has
+    room for: two runs in the same slot are one run, and the water is better in fewer,
+    heavier passes than in a count the clock cannot express.
+    """
+    if count <= 0:
+        return ()
+    first = _slot(window[0], up=True)
+    last = _slot(window[1], up=False)
+    if last < first:
+        # A window too narrow to hold a whole slot -- deep in the autumn, or a lawn far
+        # enough north. One pass, at the half hour the window is nearest to covering.
+        return (_at_slot(first if window[0] != window[1] else last),)
+    count = min(count, last - first + 1)
+    if count == 1:
+        return (_at_slot(last),)
+    span = last - first
+    return tuple(_at_slot(first + round(span * i / (count - 1))) for i in range(count))
 
 
 # What rain has to come to before a seedbed's day is called off entirely.
@@ -378,8 +538,15 @@ CHITTED_SEEDBED = SeedbedRegime(
 # rain is heavy enough that the surface cannot plausibly have dried before dark.
 SEEDBED_SOAKING_MM = 15.0
 
+# The least a pass may be and still be worth running. Below about a millimetre the water
+# wets the leaf, the leaf holds it, and the soil under it is no damper than it was -- the
+# canopy interception alone accounts for a few tenths.
+SEEDBED_MIN_PASS_MM = 0.8
 
-def seedbed_passes(regime: SeedbedRegime, day_mm: float, cap_mm: float) -> list[float]:
+
+def seedbed_passes(
+    regime: SeedbedRegime, day_mm: float, cap_mm: float, passes: int | None = None
+) -> list[float]:
     """Return the depths of the passes a day needs, to put `day_mm` on between them.
 
     A sown lawn is not watered to a schedule of fixed millimetres. It has two jobs at once:
@@ -397,12 +564,18 @@ def seedbed_passes(regime: SeedbedRegime, day_mm: float, cap_mm: float) -> list[
     is wettest in the morning, from dew and from whatever fell overnight, and driest by the
     end of the afternoon.
     """
-    if not regime.passes or day_mm <= 0:
+    wanted = regime.min_passes if passes is None else passes
+    if wanted <= 0 or day_mm <= 0:
         return []
-    floor = min(regime.mm, cap_mm)
+    # The floor is the depth one pass has to reach to wet anything; on a day split into more
+    # passes than the regime's own, each is correspondingly lighter, so the floor comes down
+    # with the count. What it may never do is fall below the point where a pass damps the
+    # leaf and nothing else.
+    floor = min(regime.mm * regime.min_passes / wanted, cap_mm)
+    floor = max(floor, SEEDBED_MIN_PASS_MM)
     if day_mm < floor:
         return []
-    count = min(regime.passes, max(1, int(day_mm // floor)))
+    count = min(wanted, max(1, int(day_mm // floor)))
     share = max(floor, min(cap_mm, day_mm / count))
     return [round(share, 1)] * count
 

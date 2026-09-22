@@ -33,6 +33,15 @@ class Lawn:
     establishment_method: str
     establishment_date: dt.date | None
     application_rate_mm_h: float | None
+    longitude: float = 0.0
+    """Degrees east, for the difference between solar noon and the clock's midday."""
+    utc_offset_h: float = 0.0
+    """Hours the lawn's own clock runs ahead of UTC, the season's shift included.
+
+    Longitude alone gives solar time. Which zone the place was put in, and whether it is on
+    summer time this week, is a fact about people rather than about the sun, so it is handed
+    in rather than worked out.
+    """
     shaded_fraction: float = 0.0
     tree_fraction: float = 0.0
     deciduous_trees: bool = False
@@ -185,6 +194,26 @@ def last_details(
     return {}
 
 
+# How far back to look for the hour the dew usually goes, and how many mornings it takes
+# before the lawn's own record is trusted over the rule of thumb. Ten days is long enough to
+# average out a wet morning and short enough to follow the season down; three is the fewest
+# that can have a middle.
+DEW_HABIT_DAYS = 10
+DEW_HABIT_MIN_DAYS = 3
+
+
+def _dew_habit(minutes: list[int]) -> dt.time | None:
+    """Return the hour the leaf usually dries, from the mornings that were watched.
+
+    The median rather than the mean: one still, foggy morning holds the humidity up until
+    noon and would drag an average across the whole fortnight with it.
+    """
+    if len(minutes) < DEW_HABIT_MIN_DAYS:
+        return None
+    middle = sorted(minutes)[len(minutes) // 2]
+    return dt.time(middle // 60, middle % 60)
+
+
 def days_since(days: dict[str, Any], kind: str, today: dt.date) -> int | None:
     """Return how many days since a maintenance kind was last recorded."""
     best: dt.date | None = None
@@ -329,6 +358,7 @@ def assess(
     since = dt.date(today.year, 1, 1) - dt.timedelta(days=30)
     temps: list[phenology.DayTemps] = []
     rh_means: list[float] = []
+    dew_minutes: list[int] = []
     tmeans: list[float] = []
     pairs: list[climate.ForecastPair] = []
     rows: list[tuple[dt.date, float | None, float | None, float | None]] = []
@@ -340,6 +370,10 @@ def assess(
         tmax, tmin = row.get("tmax"), row.get("tmin")
         if tmax is not None and tmin is not None:
             temps.append(phenology.DayTemps(date, float(tmax), float(tmin)))
+        if (today - date).days < DEW_HABIT_DAYS:
+            observed = (row.get("obs") or {}).get("dew_clear_min")
+            if observed is not None:
+                dew_minutes.append(int(observed))
         if (today - date).days < 5:
             if row.get("rh_mean") is not None:
                 rh_means.append(row["rh_mean"])
@@ -418,6 +452,8 @@ def assess(
     rain_tomorrow = next_three[1].rain_mm if next_three[1] else None
     rain_72h = _sum(f.rain_mm for f in next_three if f)
 
+    dew_clear = _dew_habit(dew_minutes)
+
     context = rules.Context(
         today=today,
         cool_season=profile.cool_season,
@@ -432,6 +468,11 @@ def assess(
         taw_mm=soil.taw_mm,
         raw_mm=soil.raw_mm,
         etc_today_mm=etc,
+        et0_today_mm=record["et0_mm"],
+        latitude=lawn.latitude,
+        longitude=lawn.longitude,
+        utc_offset_h=lawn.utc_offset_h,
+        dew_clear=dew_clear,
         rain_today_mm=record.get("rain_mm", 0.0),
         irrigation_today_mm=record.get("irrigation_mm", 0.0),
         can_convert_minutes=bool(lawn.application_rate_mm_h),

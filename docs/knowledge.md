@@ -231,9 +231,65 @@ in a humid temperate climate first, and generalised by hemisphere and grass clas
   never below the 1.5 mm that is about the least that reaches the top centimetre on a warm
   afternoon. After emergence the seedling has a root of its own and drops back to the
   ordinary three; keeping five passes on rooted seedlings is water spent on the air.
-  Whichever regime is running, the last pass is no later than 17:00: damping-off is the worse
-  risk on open seed, not the lesser one, and a seedbed wet all night grows it rather than
-  grass.
+  Whichever regime is running, the last pass leaves the leaf time to dry standing up:
+  damping-off is the worse risk on open seed, not the lesser one, and a seedbed wet all night
+  grows it rather than grass.
+- **The passes are placed against the sun, not against the clock.** Nine, one and five are
+  right for midsummer and wrong for the months either end of it, which are the months seed
+  goes down. At 45° in late September the sun is not up until twenty past seven and the dew
+  is still on the leaf at nine: a pass then adds nothing to the soil and adds an hour to the
+  leaf wetness that feeds dollar spot and damping-off. So the window hangs off sunrise and
+  sunset and moves through the season with them — the first pass three hours after sunrise,
+  which is about when dew has gone on a clear morning, and the last three hours before
+  sunset, the figure extension guidance uses for evening irrigation cut-offs. Sunrise and
+  sunset are computed the way the radiation terms already are, from latitude, longitude and
+  declination, with the standard −0.833° horizon that accounts for the sun's own radius and
+  atmospheric refraction; the result agrees with an almanac to two or three minutes. Deep in
+  the autumn window the two margins no longer fit in the day, and it is the drying margin
+  that gives way, because a pass onto a wet leaf is wasted outright while one a little late
+  merely dries a little slower.
+- **A lawn with a hygrometer on it is asked rather than guessed at.** Three hours after
+  sunrise is a clear morning at a middle latitude and nothing more. Relative humidity is the
+  surrogate the disease models already use for leaf wetness — Smith-Kerns is built on it —
+  so the morning it falls through 80 % is the morning the dew went, and that hour is written
+  on the day's page. The engine reads the median of the last ten mornings, needing three
+  before it trusts the lawn over the rule of thumb: one still, foggy morning holds the
+  humidity up until noon and would drag an average with it. The observed hour is still held
+  between an hour after sunrise and six, because a hygrometer in a hedge is not a lawn.
+- **Shade is a model term, not something the sensors can report.** Dew burns off when the sun
+  reaches the leaf, so a zone under a wall or a canopy holds its dew later and stops drying
+  earlier — the same hours of daylight, fewer of them with any drying power in them. Both
+  margins therefore widen with the shaded fraction, an hour and a half at full shade, about
+  what turfgrass shade trials report between a north wall and open ground in autumn. It has
+  to be modelled rather than observed because zones commonly share one weather station: four
+  zones reading the same hygrometer record the same morning however differently they are lit,
+  so nothing in the record can tell them apart. The correction is applied to the observed
+  hour as well as the assumed one, since a station stands in the open by definition — what it
+  reports is when open ground dried, and the shaded part of a zone was still wet then. A lawn
+  whose hygrometer happens to sit in shade is watered a little late for it, which is the safer
+  of the two errors.
+- **The passes land on the half hour.** The window moves a minute or two a day, and these
+  times are keyed into a controller by hand: a schedule that drifts with the sunrise is one
+  nobody keeps. The grid is coarse enough that a round of passes stays put for weeks and fine
+  enough to divide any window a seedbed is watered in. Both ends round inward — the first
+  pass to the half hour at or after the dew has lifted, the last to the one at or before the
+  drying margin closes — because rounding outward spends the margin that was the point of the
+  window. A window with fewer half hours in it than the day asked for passes gets the passes
+  it has room for, the water going in fewer and heavier ones.
+- **How many passes is a question about the day, not about the regime.** What kills a seedbed
+  is not the day's total evaporation but the longest gap between two waterings, and how long
+  a surface survives a gap follows the rate it dries at — which is what reference ET
+  measures. The reference figure rather than the crop one, because a seedbed has next to no
+  canopy yet. Three passes hold the top centimetre on a cool overcast day; the same water in
+  three on a hot bright one is gone to the air between them and the surface is dry by
+  mid-afternoon whatever the daily total says. So the count rises by one for each millimetre
+  of ET₀ above 1.5, to a ceiling of six — six start times per programme is the common limit
+  on domestic controllers, and about the point past which the passes are too light to wet
+  anything. The depth of each falls as the count rises, since it is the day's water divided
+  further, with a floor of 0.8 mm: below that the canopy intercepts the pass and the soil
+  under it is no damper than it was. The curve is deliberately cautious — a pass too many
+  costs a few minutes of water, a surface allowed to dry once costs the sowing, and the loss
+  is not symmetrical.
 - A lawn sown from bare soil has no established turf at all, and the establishment rule owns
   its watering outright.
 - Rooting depth grows with the lawn and is not the depth the species reaches when mature.

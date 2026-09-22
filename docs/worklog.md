@@ -26,7 +26,7 @@ can be picked up without re-reading the whole history.
   rare one in autumn. Dormant lawns are left alone unless a long drought threatens the
   crowns.
 - **A lawn sown all over becomes a seedbed for a fortnight.** The deep dawn cycle gives way
-  and the day's whole watering is three passes at 09:00, 13:00 and 17:00, sized from the
+  and the day's whole watering is a round of passes across the day, sized from the
   deficit and credited to the balance. Seed pre-germinated before sowing is on five lighter
   passes for its first five days. Only a spot repair keeps both regimes at once — dawn cycle
   for the turf, uncredited surface passes over the patches. A lawn sown from bare soil gets
@@ -421,3 +421,73 @@ the same for the panel's event merging, which the tests had also been re-impleme
   modes through a DOM shim, and checks the phone layout's CSS cannot be outranked.
 - `tests/frontend/test_i18n.mjs` checks every engine code has a sentence in both languages.
 - Both run in `make check`.
+
+## The seedbed's day, rebuilt on 22 September
+
+Reported from a real sowing: at nine in the morning the lawn was still wet, so the first pass
+was watering water. It was: the hours were constants, `(9, 13, 17)`, written for midsummer and
+used in the months either side of it, which are the months seed actually goes down.
+
+- **Sunrise and sunset are now computed**, in `et.sun_times`, from the same declination and
+  hour angle the radiation terms were already built on, plus longitude, the equation of time
+  and the zone's own offset. The −0.833° horizon is the standard one — the sun's radius plus
+  refraction — and without it sunrise came out seven minutes late at 45°. Checked against the
+  instance's own `sun.sun`: within two or three minutes at both ends.
+- **The window hangs off them**: first pass three hours after sunrise, last three hours
+  before sunset, spread evenly between because what a seedbed suffers from is the longest gap.
+  On the reporting lawn that moved the round from 09:00–17:00 to 10:20–16:24 in late
+  September, drifting to 10:49–15:40 by mid-October and back to 08:57–18:14 in July.
+- **The count now follows the day's reference ET** rather than being three or five for good:
+  one more pass per millimetre above 1.5, ceiling six, which is what a domestic controller can
+  be set to. Chitted seed keeps its floor of five. The depths fall as the count rises — the
+  day's water divided further — with a 0.8 mm floor under a pass, below which the canopy
+  intercepts it and the soil is no damper.
+- `SeedbedRegime` therefore describes a shape, not a timetable: `min_passes` and `mm`, with
+  `passes_for(et0)` and `seedbed_times(count, window)` doing the rest. The window is threaded
+  through `irrigation_plan`, `with_germination` and `germination_cycles`, and the agenda draws
+  its hours from the same call the plan is laid out with, so the calendar and the plan cannot
+  disagree.
+- The test fixtures put the lawn at 45 °N, 9 °E while the harness runs on US Pacific time,
+  which nothing noticed until something reasoned from the sun. The lawn moved to 120 °W —
+  same latitude, so the ET and phenology fixtures are untouched — rather than the clock
+  moving, which shifted which day "today" was and broke tests that pin a date.
+
+### Then, the same day
+
+- **The hours land on the half hour.** Asked for, and right: the schedule is typed into a
+  controller by hand, and "10:18 today, 10:20 tomorrow" is a job nobody does twice. Both ends
+  round inward so neither margin is spent. The round now holds still for weeks — 22 and 23
+  September come out identical, 6 and 15 October likewise.
+- **The dew margin is now observed, not assumed.** `_note_dew_cleared` writes down the first
+  hour each morning that humidity falls through 80 %, the threshold the disease models
+  already treat as leaf wetness; `_dew_habit` takes the median of the last ten mornings and
+  wants three before it overrules the constant. Clamped to between one and six hours after
+  sunrise, because a hygrometer in a hedge is not a lawn.
+- The test for it caught a real one: `now` arrives from the state-machine listener as UTC,
+  and the hour wanted is the one on the wall. Unconverted, a lawn seven zones west files the
+  afternoon as the morning.
+
+### And the shade, before any of it was committed
+
+The note above said the shaded zones would teach themselves, because the dew habit is
+recorded per zone. Checked against the reporting instance, and that is wrong: all four of its
+zones point at the same `sensor.rivalta_di_torino_humidity`, so they record the same morning
+however differently they are lit. Sharing one station between zones is the ordinary case, not
+a quirk — the difference between a zone under a wall and one in the open can never emerge
+from the record, and has to be modelled.
+
+- Both margins now widen with `shaded_fraction`, an hour and a half at full shade, pro rata.
+  On the reporting lawn that is Zone 1 at 0.3 — twenty-seven minutes later in the morning and
+  twenty-seven earlier in the evening than its three unshaded neighbours.
+- Applied to the observed hour as well as the assumed one: a station stands in the open, so
+  what it reports is when open ground dried. A hygrometer that happens to sit in shade makes
+  the lawn a little late, which is the safer error.
+- The short-day guard already in place covers what deep shade does to an October window.
+
+### Still open
+
+- Shade is taken as one number for the zone, and the sun moves. A wall on the east side
+  shades the morning and nothing else; one on the west costs the afternoon. The field model
+  records the shade as a fraction and its features as structures, so the aspect is there to
+  be used -- splitting the delay between the two margins by where the shade actually falls
+  is the next honest refinement, rather than widening both ends equally as now.

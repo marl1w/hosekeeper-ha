@@ -115,11 +115,15 @@ class DayForecast:
     rain_mm: float | None
 
 
-def _et_for(day: DayForecast, latitude: float, kc: float) -> float:
+def _et0_for(day: DayForecast, latitude: float) -> float:
     if day.tmax is None or day.tmin is None:
         return 0.0
     ra = et.extraterrestrial_radiation(latitude, day.date.timetuple().tm_yday)
-    return et.hargreaves_et0(day.tmax, day.tmin, ra) * kc
+    return et.hargreaves_et0(day.tmax, day.tmin, ra)
+
+
+def _et_for(day: DayForecast, latitude: float, kc: float) -> float:
+    return _et0_for(day, latitude) * kc
 
 
 def project(
@@ -151,14 +155,25 @@ def project(
     # and those are surface water throughout: drawn, never credited. See DayProjection.
     seedbed_day = seedbed_left > 0 and ctx.seedbed_covers_zone
 
-    def seedbed_for(owed_mm: float, rain_mm: float) -> tuple[float, float, tuple[float, ...]]:
+    def seedbed_for(
+        owed_mm: float, rain_mm: float, et0_mm: float | None
+    ) -> tuple[float, float, tuple[float, ...]]:
         """Return a day's passes as (into the balance, on the surface, the passes themselves).
 
         Rain does the seedbed's job as well as the sprinklers do, so it comes off the day
-        before the passes are counted out -- and a day the rain covers gets none at all.
+        before the passes are counted out -- and a day the rain covers gets none at all. How
+        many passes the rest is split into is the day's own business: a hot bright Thursday
+        dries its surface faster than a cool Wednesday and is wetted more often for it.
         """
         owed = max(owed_mm, regime.daily_mm) if seedbed_day else regime.daily_mm
-        depths = tuple(programme.seedbed_passes(regime, max(0.0, owed - rain_mm), seedbed_cap))
+        depths = tuple(
+            programme.seedbed_passes(
+                regime,
+                max(0.0, owed - rain_mm),
+                seedbed_cap,
+                passes=regime.passes_for(et0_mm),
+            )
+        )
         total = round(sum(depths), 1)
         return (total, 0.0, depths) if seedbed_day else (0.0, total, depths)
 
@@ -168,7 +183,8 @@ def project(
         date = ctx.today + dt.timedelta(days=offset)
         fc = by_date.get(date)
         kc = grass.crop_coefficient(ctx.grass_type, date.month, ctx.northern_hemisphere)
-        etc = _et_for(fc, latitude, kc) if fc else ctx.etc_today_mm
+        et0 = _et0_for(fc, latitude) if fc else ctx.et0_today_mm
+        etc = et0 * kc if fc else ctx.etc_today_mm
         rain = expected_rain(fc.rain_mm if fc else None, ctx.skill)
         sowing_today = offset < seedbed_left
         if offset == 0:
@@ -206,7 +222,7 @@ def project(
             # The seedbed is put back to full every day rather than run down to a threshold:
             # the seed lives in the top centimetre, which is either damp or it is not. Rain
             # expected that day does the same job and comes off what the passes have to do.
-            irrigation, surface, passes = seedbed_for(wanted, rain)
+            irrigation, surface, passes = seedbed_for(wanted, rain, et0)
         if not (sowing_today and seedbed_day) and not dormant and wanted >= threshold:
             # A lawn whose seed is only in patches still has its dawn cycle to run.
             candidate = round(max(0.0, deficit * ctx.irrigation_factor - rain))
@@ -300,7 +316,6 @@ def build(
             date = ctx.today + dt.timedelta(days=offset)
             if offset == 0 and "seedbed_watering" in ctx.done_today:
                 continue  # done today; tomorrow asks again
-            regime = ctx.seedbed
             depths = list(projected[date].seedbed_depths_mm) if date in projected else []
             if not depths:
                 continue  # rain is keeping the seedbed damp; the advice says so
@@ -308,16 +323,17 @@ def build(
             params: dict[str, Any] = {
                 "times": len(depths),
                 "mm": each_mm,
-                # The hours the regime runs to, so a day still to be decided is drawn the
-                # way the morning will actually lay it out. Chitted seed is on five of them,
-                # not the ordinary three.
-                "hours": [at.strftime("%H:%M") for at in regime.times[-len(depths) :]],
+                # The hours the passes run at, so a day still to be decided is drawn the
+                # way the morning will actually lay it out. They are the day's own: the
+                # window hangs off that date's sunrise and sunset, and how many passes fill
+                # it is what that day's drying power asked for.
+                "hours": [at.strftime("%H:%M") for at in ctx.seedbed_hours(len(depths), date)],
             }
             if minutes_per_mm:
                 # How long to run, which on a lawn with a system on it is the only number
                 # anybody can act on: "2.1 mm" is not something a controller can be set to.
                 params["minutes"] = max(1, round(each_mm * minutes_per_mm))
-                params["total_minutes"] = params["minutes"] * regime.passes
+                params["total_minutes"] = params["minutes"] * len(depths)
             items.append(
                 AgendaItem(
                     date.isoformat(),

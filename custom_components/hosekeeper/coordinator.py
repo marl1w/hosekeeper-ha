@@ -29,7 +29,7 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_change,
 )
-from homeassistant.helpers.sun import get_astral_event_next
+from homeassistant.helpers.sun import get_astral_event_date, get_astral_event_next
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import (
@@ -41,6 +41,7 @@ from homeassistant.util.unit_conversion import (
 from .const import DOMAIN
 from .diary import DayRecord, Diary
 from .engine import activity as activity_engine, agenda, assess, et, schedule
+from .engine.knowledge import programme
 from .field import FieldConfig
 
 _LOGGER = logging.getLogger(__name__)
@@ -284,11 +285,24 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
         self.diary.add_irrigation(minutes, mm, "manual", at)
         await self._commit()
 
+    def _utc_offset_h(self) -> float:
+        """Return how far the lawn's own clock is ahead of UTC today, summer time included.
+
+        The engine places a seedbed's passes against sunrise, and sunrise is a solar event
+        that has to be told what the clocks say. Taken for today rather than once at setup,
+        because the answer changes twice a year and a seedbed sown in late October would
+        otherwise be watered an hour early for the rest of its fortnight.
+        """
+        offset = dt_util.now().utcoffset()
+        return offset.total_seconds() / 3600.0 if offset else 0.0
+
     def _lawn(self) -> assess.Lawn:
         """Return this zone as the engine wants it: a description, with no Home Assistant."""
         return assess.Lawn(
             name=self.field.name,
             latitude=self.field.latitude,
+            longitude=self.field.longitude,
+            utc_offset_h=self._utc_offset_h(),
             soil_type=self.field.soil_type,
             grass_type=self.field.grass_type,
             establishment_method=self.field.establishment_method,
@@ -396,10 +410,37 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
         if humidity is not None:
             obs["rh_sum"] = obs.get("rh_sum", 0.0) + humidity
             obs["rh_n"] = obs.get("rh_n", 0) + 1
+            self._note_dew_cleared(now, humidity, obs)
         wind = self._read_wind_ms(self.field.wind_sensor)
         if wind is not None:
             obs["wind_sum"] = obs.get("wind_sum", 0.0) + wind
             obs["wind_n"] = obs.get("wind_n", 0) + 1
+
+    def _note_dew_cleared(self, now: dt.datetime, humidity: float, obs: dict[str, Any]) -> None:
+        """Record the first hour this morning the humidity said the leaf had dried.
+
+        A seedbed's first pass waits for the dew, and three hours after sunrise is only a
+        rule of thumb for it. A lawn with a hygrometer can be asked instead: humidity is the
+        surrogate the disease models already use for leaf wetness, and the morning it falls
+        through the threshold is the morning the dew went. Kept per day, so the engine reads
+        a habit off several of them rather than trusting one.
+
+        Only the morning counts. Humidity falls through 80 % somewhere in most afternoons
+        too, and an evening reading says nothing about when the lawn dried.
+        """
+        if "dew_clear_min" in obs or humidity >= programme.SEEDBED_DEW_RH_PCT:
+            return
+        # The hour wanted is the one on the wall, and a sample can arrive carrying a state
+        # machine's UTC timestamp. An hour recorded in the wrong zone is not a near miss --
+        # it is the afternoon filed as the morning.
+        now = dt_util.as_local(now)
+        sunrise = get_astral_event_date(self.hass, "sunrise", now.date())
+        if sunrise is None:
+            return
+        sunrise = dt_util.as_local(sunrise)
+        if not sunrise < now < sunrise.replace(hour=12, minute=0, second=0, microsecond=0):
+            return
+        obs["dew_clear_min"] = now.hour * 60 + now.minute
 
     def _accumulate_rain(self, state: str, attributes: dict[str, Any]) -> None:
         value = _to_float(state)
@@ -844,6 +885,7 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
                     self._germination_offset(target_date),
                     result.seedbed,
                     result.seedbed_depths_mm,
+                    result.context.seedbed_window(target_date),
                     whole_zone=result.seedbed_covers_zone,
                 )
             today["irrigation_plan"] = current.as_dict()
@@ -887,6 +929,7 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             # the whole of its watering, so they carry what the root zone is down by.
             seedbed_whole_zone=result.seedbed_covers_zone,
             seedbed_depths=result.seedbed_depths_mm,
+            seedbed_window=result.context.seedbed_window(target_date),
         )
         if revision is not None:
             fresh = schedule.revised(fresh, wetter=revision)

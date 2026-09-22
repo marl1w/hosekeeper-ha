@@ -23,7 +23,7 @@ def test_reads_every_field(field_data: dict[str, Any]) -> None:
     field = FieldConfig.from_data(field_data)
     assert field.name == "South lawn"
     assert field.area_m2 == 120.0
-    assert (field.latitude, field.longitude) == (45.0, 9.0)
+    assert (field.latitude, field.longitude) == (45.0, -120.0)
     assert field.establishment_date == dt.date(2025, 4, 12)
     assert field.rain_sensor == "sensor.weather_station_rain"
     assert field.temperature_sensor is None

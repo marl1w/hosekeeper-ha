@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import datetime as dt
+import math
+
 import pytest
 
 from custom_components.hosekeeper.engine import et
@@ -75,3 +78,38 @@ def test_hot_dry_summer_day_in_the_po_valley() -> None:
     day = et.WeatherDay(34.0, 22.0, rh_mean=40.0, wind_2m_ms=1.0, rs_mj=26.0)
     et0 = et.penman_monteith_et0(day, latitude_deg=45.0, elevation_m=280, day_of_year=200)
     assert 5.5 < et0 < 7.5
+
+
+def test_sunrise_and_sunset_agree_with_an_almanac() -> None:
+    """The seedbed's day hangs off these, so they have to be right to a few minutes."""
+    # Rivalta di Torino, 45.03 N 7.51 E, on summer time. Checked against Home Assistant's
+    # own sun integration, which reported 07:18 and 19:27 on the day.
+    sunrise, sunset = et.sun_times(45.028, 7.512, dt.date(2026, 9, 22).timetuple().tm_yday, 2.0)
+    assert abs(_minutes(sunrise) - _minutes(dt.time(7, 18))) <= 3
+    assert abs(_minutes(sunset) - _minutes(dt.time(19, 27))) <= 3
+
+    # The solstices, where the error would show up worst if the declination were wrong.
+    june = et.sun_times(45.028, 7.512, dt.date(2026, 6, 21).timetuple().tm_yday, 2.0)
+    december = et.sun_times(45.028, 7.512, dt.date(2026, 12, 21).timetuple().tm_yday, 1.0)
+    assert _minutes(june[1]) - _minutes(june[0]) > 15 * 60, "long June day"
+    assert _minutes(december[1]) - _minutes(december[0]) < 9 * 60, "short December one"
+
+
+def test_the_horizon_includes_refraction_and_the_discs_own_radius() -> None:
+    """Geometric sunrise is some seven minutes late at these latitudes."""
+    doy = dt.date(2026, 9, 22).timetuple().tm_yday
+    sunrise, _ = et.sun_times(45.028, 7.512, doy, 2.0)
+    phi, delta = math.radians(45.028), et.solar_declination(doy)
+    geometric_half_day = math.degrees(math.acos(-math.tan(phi) * math.tan(delta))) / 15
+    noon = 12 - 7.512 / 15 - et.equation_of_time(doy) / 60 + 2.0
+    assert _minutes(sunrise) < (noon - geometric_half_day) * 60
+
+
+def test_the_equation_of_time_swings_both_ways_across_the_year() -> None:
+    """Up to a quarter of an hour fast in November and slow in February."""
+    assert et.equation_of_time(dt.date(2026, 11, 3).timetuple().tm_yday) > 14
+    assert et.equation_of_time(dt.date(2026, 2, 11).timetuple().tm_yday) < -13
+
+
+def _minutes(at: dt.time) -> int:
+    return at.hour * 60 + at.minute
