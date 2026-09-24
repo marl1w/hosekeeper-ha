@@ -40,8 +40,7 @@ from homeassistant.util.unit_conversion import (
 
 from .const import DOMAIN
 from .diary import DayRecord, Diary
-from .engine import activity as activity_engine, agenda, assess, et, schedule
-from .engine.knowledge import programme
+from .engine import activity as activity_engine, agenda, assess, dew, et, schedule
 from .field import FieldConfig
 
 _LOGGER = logging.getLogger(__name__)
@@ -410,37 +409,106 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
         if humidity is not None:
             obs["rh_sum"] = obs.get("rh_sum", 0.0) + humidity
             obs["rh_n"] = obs.get("rh_n", 0) + 1
-            self._note_dew_cleared(now, humidity, obs)
         wind = self._read_wind_ms(self.field.wind_sensor)
         if wind is not None:
             obs["wind_sum"] = obs.get("wind_sum", 0.0) + wind
             obs["wind_n"] = obs.get("wind_n", 0) + 1
+        self._track_leaf(now, temperature, humidity)
 
-    def _note_dew_cleared(self, now: dt.datetime, humidity: float, obs: dict[str, Any]) -> None:
-        """Record the first hour this morning the humidity said the leaf had dried.
+    def _track_leaf(
+        self, now: dt.datetime, temperature: float | None, humidity: float | None
+    ) -> None:
+        """Carry the water on the leaf forward to this sample, and note when it has dried.
 
         A seedbed's first pass waits for the dew, and three hours after sunrise is only a
-        rule of thumb for it. A lawn with a hygrometer can be asked instead: humidity is the
-        surrogate the disease models already use for leaf wetness, and the morning it falls
-        through the threshold is the morning the dew went. Kept per day, so the engine reads
-        a habit off several of them rather than trusting one.
-
-        Only the morning counts. Humidity falls through 80 % somewhere in most afternoons
-        too, and an evening reading says nothing about when the lawn dried.
+        rule of thumb for it. Humidity was asked instead for a while, and it answers a
+        different question: the air dries as soon as the sun warms it, the leaf an hour or
+        more later. So the leaf is kept as a store of water, filled by the night and
+        emptied by the morning at the rate the station's own readings say (`engine/dew`),
+        and the hour it empties is written on the day's page for the engine to read a habit
+        off. Without a pyranometer there is no energy balance to run, and the rule of thumb
+        stands.
         """
-        if "dew_clear_min" in obs or humidity >= programme.SEEDBED_DEW_RH_PCT:
+        solar = self._read_float(self.field.solar_sensor)
+        if temperature is None or humidity is None or solar is None:
             return
         # The hour wanted is the one on the wall, and a sample can arrive carrying a state
         # machine's UTC timestamp. An hour recorded in the wrong zone is not a near miss --
         # it is the afternoon filed as the morning.
         now = dt_util.as_local(now)
+        obs = self._leaf_obs(now)
+        rate = dew.wet_leaf_rate(
+            temperature,
+            humidity,
+            solar,
+            wind_ms=self._read_wind_ms(self.field.wind_sensor),
+            cloud_fraction=self._cloud_fraction(),
+            elevation_m=float(self.hass.config.elevation or 0),
+        )
+        last = dt_util.parse_datetime(obs.get("leaf_ts", "") or "")
+        hours = (now - last).total_seconds() / 3600.0 if last is not None else None
+        if hours is None or hours > dew.LEAF_MAX_STEP_H:
+            # Not heard from for longer than can be bridged: the store starts again, and so
+            # does the count of how long it has been watched.
+            obs["leaf_from"] = now.isoformat()
+        elif hours > 0:
+            obs["leaf_mm"] = round(dew.step(obs.get("leaf_mm", 0.0), rate, hours), 4)
+        obs["leaf_ts"] = now.isoformat()
+        self._note_leaf_dry(now, obs)
+
+    def _leaf_obs(self, now: dt.datetime) -> dict[str, Any]:
+        """Return today's figures with the leaf's store carried over from last night.
+
+        Dew is made across midnight, so the store cannot start empty with the page: the
+        first sample of the day takes over what yesterday's last one left.
+        """
+        obs = self._obs(now)
+        if "leaf_ts" not in obs:
+            yesterday = (now.date() - dt.timedelta(days=1)).isoformat()
+            before = self.diary.days.get(yesterday, {}).get("obs", {})
+            for key in ("leaf_mm", "leaf_ts", "leaf_from"):
+                if key in before:
+                    obs[key] = before[key]
+        return obs
+
+    def _wet_leaf(self, mm: float, now: dt.datetime) -> None:
+        """Put rain or irrigation onto the leaf, up to what it holds."""
+        if mm <= 0 or not self.field.solar_sensor:
+            return
+        obs = self._leaf_obs(dt_util.as_local(now))
+        obs["leaf_mm"] = round(dew.step(obs.get("leaf_mm", 0.0), 0.0, 0.0, added_mm=mm), 4)
+
+    def _note_leaf_dry(self, now: dt.datetime, obs: dict[str, Any]) -> None:
+        """Record the first hour this morning the leaf held no more water.
+
+        Only a store that was watched through the night can say so: one started at ten in
+        the morning, after a restart that could not be bridged or on the day Hosekeeper was
+        installed, is empty because nobody saw the dew arrive, not because it has gone. A
+        morning still wet at noon is written down as noon rather than left out, so a foggy
+        one counts as late instead of vanishing from the habit and making it earlier.
+        """
+        if "leaf_dry_min" in obs:
+            return
         sunrise = get_astral_event_date(self.hass, "sunrise", now.date())
         if sunrise is None:
             return
         sunrise = dt_util.as_local(sunrise)
-        if not sunrise < now < sunrise.replace(hour=12, minute=0, second=0, microsecond=0):
+        if now <= sunrise:
             return
-        obs["dew_clear_min"] = now.hour * 60 + now.minute
+        watched = dt_util.parse_datetime(obs.get("leaf_from", "") or "")
+        if watched is None or sunrise - watched < dt.timedelta(hours=dew.LEAF_NIGHT_H):
+            return
+        noon = sunrise.replace(hour=12, minute=0, second=0, microsecond=0)
+        if obs.get("leaf_mm", 0.0) > dew.LEAF_DRY_MM and now < noon:
+            return
+        at = min(now, noon)
+        obs["leaf_dry_min"] = at.hour * 60 + at.minute
+
+    def _cloud_fraction(self) -> float | None:
+        """Return the weather entity's cloud cover as a fraction, when it reports one."""
+        state = self.hass.states.get(self.field.weather_entity)
+        value = None if state is None else _to_float(state.attributes.get("cloud_coverage"))
+        return None if value is None else value / 100.0
 
     def _accumulate_rain(self, state: str, attributes: dict[str, Any]) -> None:
         value = _to_float(state)
@@ -473,6 +541,7 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
         obs["rain_last"] = value
         if delta > 0:
             obs["rain_last_at"] = dt_util.now().isoformat()
+            self._wet_leaf(delta, dt_util.now())
         today["rain_mm"] = today.get("rain_mm", 0.0) + delta
         today["rain_source"] = "sensor"
 
@@ -513,6 +582,7 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
         if minutes <= 0:
             return
         mm = self.field.minutes_to_mm(minutes)
+        self._wet_leaf(mm, now)
         # Which cycle the valve was serving decides which book the run goes in. A seedbed
         # pass and a midday syringing wet the surface and are kept out of the balance, the
         # same way the projection keeps them out; crediting them would tell the balance the

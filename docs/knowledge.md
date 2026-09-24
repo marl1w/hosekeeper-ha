@@ -248,25 +248,40 @@ in a humid temperate climate first, and generalised by hemisphere and grass clas
   the autumn window the two margins no longer fit in the day, and it is the drying margin
   that gives way, because a pass onto a wet leaf is wasted outright while one a little late
   merely dries a little slower.
-- **A lawn with a hygrometer on it is asked rather than guessed at.** Three hours after
-  sunrise is a clear morning at a middle latitude and nothing more. Relative humidity is the
-  surrogate the disease models already use for leaf wetness — Smith-Kerns is built on it —
-  so the morning it falls through 80 % is the morning the dew went, and that hour is written
-  on the day's page. The engine reads the median of the last ten mornings, needing three
-  before it trusts the lawn over the rule of thumb: one still, foggy morning holds the
-  humidity up until noon and would drag an average with it. The observed hour is still held
-  between an hour after sunrise and six, because a hygrometer in a hedge is not a lawn.
+- **A lawn with a weather station on it is asked rather than guessed at — about the leaf,
+  not the air.** Three hours after sunrise is a clear morning at a middle latitude and nothing
+  more. The first attempt read the hour humidity fell through 80 %, the surrogate the disease
+  models use for leaf wetness, and it was early by an hour or more: the air dries as soon as
+  the sun warms it, the leaf only once the water on it has evaporated. So the leaf is kept as
+  a store of water through the night and the morning. The rate either way is the Penman
+  equation for a wet surface — the FAO-56 hourly reference equation with the surface
+  resistance at zero, soil heat flux a tenth of net radiation by day and half by night
+  (eqs. 45, 46, 53) — which is the core of the surface-wetness energy balance models: Pedro
+  and Gillespie, *Estimating dew duration*, Agricultural Meteorology 25 (1982); Magarey and
+  others, *Estimating surface wetness on plants*, in Micrometeorology in Agricultural Systems,
+  ASA Agronomy Monograph 47 (2005). Net longwave takes its cloudiness term from the weather
+  entity's cloud cover through the Angström relation (eq. 35), so it holds at night, when
+  there is no sunshine to measure; no cloud cover is read as a clear sky, the most dew. Rain
+  and irrigation top the store up, and it holds half a millimetre, within the few tenths to a
+  millimetre given for a short grass canopy's interception. The hour it empties is written on
+  the day's page — only if the store was running for at least four hours before sunrise, so
+  a store that never saw the dew arrive is not taken to have seen it go, and as noon on a
+  morning still wet at noon, so a foggy one counts as late rather than vanishing. The engine
+  reads the median of the last ten mornings, needing three before it trusts the lawn over the
+  rule of thumb, and still holds the result between an hour after sunrise and six. Replayed
+  on the reporting lawn's 24 September — air through 80 % at 08:34, grass wet at 09:30 — the
+  store empties between ten and eleven.
 - **Shade is a model term, not something the sensors can report.** Dew burns off when the sun
   reaches the leaf, so a zone under a wall or a canopy holds its dew later and stops drying
   earlier — the same hours of daylight, fewer of them with any drying power in them. Both
   margins therefore widen with the shaded fraction, an hour and a half at full shade, about
   what turfgrass shade trials report between a north wall and open ground in autumn. It has
   to be modelled rather than observed because zones commonly share one weather station: four
-  zones reading the same hygrometer record the same morning however differently they are lit,
+  zones reading the same station record the same morning however differently they are lit,
   so nothing in the record can tell them apart. The correction is applied to the observed
   hour as well as the assumed one, since a station stands in the open by definition — what it
   reports is when open ground dried, and the shaded part of a zone was still wet then. A lawn
-  whose hygrometer happens to sit in shade is watered a little late for it, which is the safer
+  whose station happens to sit in shade is watered a little late for it, which is the safer
   of the two errors.
 - **The passes land on the half hour.** The window moves a minute or two a day, and these
   times are keyed into a controller by hand: a schedule that drifts with the sunrise is one

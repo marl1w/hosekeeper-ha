@@ -99,6 +99,9 @@ through the websocket API.
   plus the Bottos range, with NPK and release period), the seasonal care calendar per climate
   zone, and the first-year programme for sod versus seed. Every entry cites its source in
   `docs/knowledge.md`.
+- `dew.py` — water on the leaf: the Penman equation for a wet surface, run on the station's
+  readings through the night and the morning, so the hour the dew has actually gone can be
+  written down for the seedbed's first pass.
 - `climate.py` — the forecast-versus-actual loop. Every day the forecast that was issued for
   that day is kept next to what the sensors measured, so the engine learns the local bias of
   the forecast (rain over- or under-called, highs called too low under haze) and weights

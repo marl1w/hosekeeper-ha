@@ -137,10 +137,10 @@ class Context:
     start losing the light, so no corner is watered wet and none is left wet after dark.
     """
     dew_clear: dt.time | None = None
-    """The hour this lawn's own humidity says the leaf usually dries, when it has been read.
+    """The hour this lawn's own station says the leaf usually dries, when it has been read.
 
     None falls back to the three hours after sunrise a clear morning takes at a middle
-    latitude, which is the best a lawn with no hygrometer on it can be given.
+    latitude, which is the best a lawn with no weather station on it can be given.
     """
     """Where and when the lawn is, so the hour the sun rises can be worked out for any day.
 

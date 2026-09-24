@@ -205,7 +205,7 @@ DEW_HABIT_MIN_DAYS = 3
 def _dew_habit(minutes: list[int]) -> dt.time | None:
     """Return the hour the leaf usually dries, from the mornings that were watched.
 
-    The median rather than the mean: one still, foggy morning holds the humidity up until
+    The median rather than the mean: one still, foggy morning keeps the leaf wet until
     noon and would drag an average across the whole fortnight with it.
     """
     if len(minutes) < DEW_HABIT_MIN_DAYS:
@@ -376,7 +376,7 @@ def assess(
         if (today - date).days < programme.SEEDBED_ET0_DAYS and row.get("et0_mm") is not None:
             et0_recent.append(float(row["et0_mm"]))
         if (today - date).days < DEW_HABIT_DAYS:
-            observed = (row.get("obs") or {}).get("dew_clear_min")
+            observed = (row.get("obs") or {}).get("leaf_dry_min")
             if observed is not None:
                 dew_minutes.append(int(observed))
         if (today - date).days < 5:

@@ -24,7 +24,7 @@ from custom_components.hosekeeper.const import (
     CONF_WIND_SENSOR,
     DOMAIN,
 )
-from custom_components.hosekeeper.engine import et, schedule
+from custom_components.hosekeeper.engine import dew, et, schedule
 from custom_components.hosekeeper.engine.knowledge import programme
 from tests.conftest import make_entry, only_zone, split
 
@@ -1119,46 +1119,82 @@ async def test_the_day_keeps_the_lines_it_carried(
     assert "asked" not in stale
 
 
+async def _station_reads(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    at: dt.datetime,
+    temperature: float,
+    humidity: float,
+    solar: float,
+) -> None:
+    """Move the clock to `at` and have the station report, whether or not its values moved."""
+    freezer.move_to(at)
+    hass.states.async_set(TEMP, str(temperature), {"unit_of_measurement": "°C"})
+    hass.states.async_set(RH, str(humidity), {"unit_of_measurement": "%"})
+    hass.states.async_set(WIND, "0.0", {"unit_of_measurement": "km/h"})
+    # A changed attribute is a state change, so a morning that holds steady still samples.
+    hass.states.async_set(SOLAR, str(solar), {"unit_of_measurement": "W/m²", "at": at.isoformat()})
+    await hass.async_block_till_done()
+
+
+def _next_sunrise(hass: HomeAssistant) -> dt.datetime:
+    tomorrow = dt_util.now().date() + dt.timedelta(days=1)
+    return dt_util.as_local(get_astral_event_date(hass, "sunrise", tomorrow) or dt_util.now())
+
+
 @pytest.mark.usefixtures("weather_service", "station")
-async def test_the_morning_the_humidity_falls_is_written_down_as_the_dew_going(
+async def test_the_hour_the_dew_has_gone_off_the_leaf_is_written_down(
     hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
 ) -> None:
-    """A seedbed's first pass waits for the dew, and the hygrometer knows when it went.
+    """A seedbed's first pass waits for the dew, and the station can say when it went.
 
-    Three hours after sunrise is a rule of thumb for a clear morning. A lawn with a
-    humidity sensor on it can be asked instead, so the hour it crosses the threshold is
-    kept on the day's page for the engine to read a habit off.
+    Not by the humidity: the air dries as soon as the sun is on it, the leaf only once the
+    water on it has gone. The night's dew is kept as a store, and the hour it empties is kept
+    on the day's page for the engine to read a habit off.
     """
     entry = await _setup(hass, field_data)
     zone = only_zone(entry)
-    sunrise = dt_util.as_local(
-        get_astral_event_date(hass, "sunrise", dt_util.now().date()) or dt_util.now()
-    )
+    sunrise = _next_sunrise(hass)
 
-    # Still wet an hour after the sun is up: nothing is recorded.
-    freezer.move_to(sunrise + dt.timedelta(hours=1))
-    hass.states.async_set(RH, "92", {"unit_of_measurement": "%"})
-    await zone.coordinator.async_refresh()
-    await hass.async_block_till_done()
-    assert "dew_clear_min" not in (zone.diary.today().get("obs") or {})
+    # A clear, still, humid night lays dew down.
+    for hours in range(-6, 1):
+        await _station_reads(hass, freezer, sunrise + dt.timedelta(hours=hours), 12.0, 92, 0)
+    obs = zone.diary.day(sunrise.date().isoformat()).get("obs") or {}
+    assert obs.get("leaf_mm", 0.0) > dew.LEAF_DRY_MM
+    assert "leaf_dry_min" not in obs, "still dark, and still wet"
 
-    # Two hours later it has dried, and that is the hour that is kept.
-    dried_at = sunrise + dt.timedelta(hours=3)
-    freezer.move_to(dried_at)
-    hass.states.async_set(RH, "55", {"unit_of_measurement": "%"})
-    await zone.coordinator.async_refresh()
-    await hass.async_block_till_done()
-    obs = zone.diary.today().get("obs") or {}
-    assert obs.get("dew_clear_min") == dried_at.hour * 60 + dried_at.minute
+    # The sun comes up on a drying morning. The air is dry at once; the leaf is not.
+    at = sunrise
+    while "leaf_dry_min" not in obs and at < sunrise + dt.timedelta(hours=6):
+        at += dt.timedelta(minutes=20)
+        await _station_reads(hass, freezer, at, 20.0, 55, 450)
+    assert obs["leaf_dry_min"] == at.hour * 60 + at.minute
+    assert at > sunrise + dt.timedelta(minutes=20), "the leaf dried after the air did"
+    assert obs["leaf_mm"] <= dew.LEAF_DRY_MM
 
-    # The first crossing of the morning is the one that counts, not the last.
-    freezer.move_to(sunrise + dt.timedelta(hours=4))
-    hass.states.async_set(RH, "30", {"unit_of_measurement": "%"})
-    await zone.coordinator.async_refresh()
-    await hass.async_block_till_done()
-    assert (zone.diary.today().get("obs") or {})["dew_clear_min"] == (
-        dried_at.hour * 60 + dried_at.minute
-    )
+    # The first morning it dried is the one that counts, not the last.
+    await _station_reads(hass, freezer, at + dt.timedelta(hours=1), 24.0, 40, 600)
+    assert obs["leaf_dry_min"] == at.hour * 60 + at.minute
+
+
+@pytest.mark.usefixtures("weather_service", "station")
+async def test_a_leaf_nobody_watched_overnight_is_not_called_dry(
+    hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
+) -> None:
+    """A store started after sunrise is empty because it did not see the dew.
+
+    Not because the dew has gone: Hosekeeper installed at ten in the morning must not teach
+    the engine that this lawn dries at ten.
+    """
+    entry = await _setup(hass, field_data)
+    zone = only_zone(entry)
+    sunrise = _next_sunrise(hass)
+
+    for minutes in range(120, 300, 20):
+        await _station_reads(hass, freezer, sunrise + dt.timedelta(minutes=minutes), 22.0, 45, 500)
+    obs = zone.diary.day(sunrise.date().isoformat()).get("obs") or {}
+    assert "leaf_ts" in obs, "the store is running"
+    assert "leaf_dry_min" not in obs
 
 
 @pytest.mark.usefixtures("weather_service", "station")

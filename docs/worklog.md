@@ -586,7 +586,38 @@ hours had. The count is asked for now rather than inferred. Worth remembering as
 bug rather than a bug: a check that takes one of its inputs from the thing it is checking
 cannot see that input go wrong.
 
+### The dew, measured on the leaf rather than in the air — 24 September
+
+Reported from the lawn: the plan said water at 09:30 and the grass was plainly wet. The
+window had been anchored to the dew habit, and the habit to the hour humidity fell through
+80 % — 08:34 that morning, plus the shade's twenty-seven minutes, rounded up. The air was at
+73 % when the complaint came in. Two things were wrong with reading the dew off it:
+
+- The air dries as soon as the sun warms it; the leaf only once the water on it has
+  evaporated. A threshold on the air answers the wrong question however it is tuned.
+- A night that never reached 80 % still wrote down a crossing — the first sample after
+  sunrise — so dry nights pulled the median early. 22 and 23 September both would have.
+
+`engine/dew.py` now keeps the water on the leaf as a store. The rate is FAO-56's hourly
+equation with the surface resistance at zero, the Penman equation for a wet surface, which is
+what the surface-wetness energy balance models are built on; its combination form carries the
+leaf's cooling below the screen in the net radiation term, so no leaf temperature is needed.
+The coordinator integrates it on every station sample, carries it across midnight, tops it up
+with rain and valve runs, and writes `leaf_dry_min` the first sample after sunrise the store is
+empty. The key is new on purpose: the `dew_clear_min` mornings written by the humidity rule
+are the readings being replaced, and letting them into the median would keep the error alive
+for a week and a half. Until three mornings are recorded the lawn is on the three-hour rule,
+which on the reporting lawn is 11:00 with Zone 1's shade — later than the dew, not earlier.
+
+A lawn without a pyranometer has no energy balance to run and stays on the rule of thumb;
+humidity alone is no longer consulted for the dew.
+
 ### Still open
+
+- The dew store has no fitted parameter. It ignores guttation, and the net longwave is FAO's
+  screen-level estimate. A diary note -- "leaf still wet at 09:30", "dry at 10:40" -- would
+  give it something to be calibrated against, and is the next step if the lawn and the
+  store disagree.
 
 - Shade is taken as one number for the zone, and the sun moves. A wall on the east side
   shades the morning and nothing else; one on the west costs the afternoon. The field model

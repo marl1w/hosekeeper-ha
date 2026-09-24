@@ -430,17 +430,17 @@ CHITTED_SEEDBED = SeedbedRegime("chitted", 5, 1.5)
 SEEDBED_AFTER_SUNRISE = dt.timedelta(hours=3)
 SEEDBED_BEFORE_SUNSET = dt.timedelta(hours=3)
 
-# Three hours is a clear morning at a middle latitude, and a lawn with a hygrometer on it
-# need not be guessed at. Relative humidity is the surrogate the disease models already use
-# for leaf wetness -- Smith-Kerns is built on it -- and 80 % is where the leaf is taken to
-# have dried. So when the lawn's own humidity has been watched through a morning, the hour
-# it crossed is the hour the dew lifted, and it replaces the rule of thumb.
+# Three hours is a clear morning at a middle latitude, and a lawn with a weather station on
+# it need not be guessed at. The coordinator keeps the water on the leaf as an energy balance
+# (`engine/dew`): the night lays dew down, the morning evaporates it, and the hour the store
+# empties is the hour the dew lifted. It replaces the rule of thumb. Humidity alone was used
+# before and was early by an hour or more -- the air dries as soon as the sun warms it, the
+# leaf only once the water on it has gone.
 #
-# Within limits, because one morning is not a habit and a hygrometer in a hedge is not a
-# lawn. The observed hour is never taken earlier than an hour after sunrise, which is about
-# the soonest a real canopy dries, nor later than solar noon, past which the morning is gone
-# and a seedbed that has waited that long has waited too long.
-SEEDBED_DEW_RH_PCT = 80.0
+# Within limits, because one morning is not a habit and a station is not a lawn. The observed
+# hour is never taken earlier than an hour after sunrise, which is about the soonest a real
+# canopy dries, nor later than solar noon, past which the morning is gone and a seedbed that
+# has waited that long has waited too long.
 SEEDBED_DEW_EARLIEST = dt.timedelta(hours=1)
 SEEDBED_DEW_LATEST = dt.timedelta(hours=6)
 
@@ -454,7 +454,7 @@ SEEDBED_DEW_LATEST = dt.timedelta(hours=6)
 #
 # It is applied to the observed hour as well as to the assumed one, because a weather
 # station stands in the open by definition: what it reports is when open ground dried, and
-# the shaded part of a zone is still wet when it did. A lawn whose hygrometer sits in the
+# the shaded part of a zone is still wet when it did. A lawn whose station sits in the
 # shade will be watered a little late for it, which is the safer of the two errors.
 SEEDBED_SHADE_DELAY = dt.timedelta(minutes=90)
 
@@ -467,7 +467,7 @@ def seedbed_window(
 ) -> tuple[dt.time, dt.time]:
     """Return the first and last hour a seedbed's passes may run on a day with this sun.
 
-    `dew_clear` is the hour the lawn's own humidity says the leaf dried, averaged over the
+    `dew_clear` is the hour the lawn's own station says the leaf dried, averaged over the
     mornings there are records for. Given one, it stands in for the three-hour rule of thumb.
     `shaded_fraction` then pushes both margins in, because shaded turf dries later and stops
     drying sooner; the result is clamped to the span a canopy plausibly dries in.

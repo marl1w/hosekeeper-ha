@@ -198,8 +198,8 @@ def test_a_window_with_too_few_half_hours_gets_the_passes_it_has_room_for() -> N
     assert programme.seedbed_times(6, narrow) == (dt.time(11, 0), dt.time(11, 30), dt.time(12, 0))
 
 
-def test_the_lawns_own_humidity_outranks_the_three_hour_rule_of_thumb() -> None:
-    """A hygrometer on the lawn knows when the dew went; the constant only guesses."""
+def test_the_lawns_own_station_outranks_the_three_hour_rule_of_thumb() -> None:
+    """A station on the lawn knows when the dew went; the constant only guesses."""
     sunrise, sunset = dt.time(7, 20), dt.time(19, 24)
     assumed = programme.seedbed_window(sunrise, sunset)
     assert assumed[0] == dt.time(10, 20), "three hours after sunrise, with nothing observed"
@@ -212,7 +212,7 @@ def test_the_lawns_own_humidity_outranks_the_three_hour_rule_of_thumb() -> None:
 
 
 def test_an_observed_hour_is_still_held_to_what_a_canopy_can_actually_do() -> None:
-    """One reading from a hygrometer in a hedge does not get to set the whole day."""
+    """One morning from a station in a hedge does not get to set the whole day."""
     sunrise, sunset = dt.time(7, 20), dt.time(19, 24)
     # Nothing dries in the first few minutes of daylight, whatever the sensor says.
     assert programme.seedbed_window(sunrise, sunset, dt.time(7, 25))[0] == dt.time(8, 20)
@@ -235,7 +235,7 @@ def test_a_shaded_zone_dries_later_and_stops_drying_sooner() -> None:
 
 
 def test_shade_moves_an_observed_hour_too_because_the_station_stands_in_the_open() -> None:
-    """The hygrometer reports when open ground dried, not when the shaded corner did."""
+    """The station reports when open ground dried, not when the shaded corner did."""
     sunrise, sunset = dt.time(7, 20), dt.time(19, 24)
     observed = dt.time(9, 40)
     assert programme.seedbed_window(sunrise, sunset, observed)[0] == observed
