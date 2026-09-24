@@ -455,6 +455,7 @@ def invent(
         "et_anomaly": result.anomalies.et_anomaly,
         "irrigation_factor": result.irrigation_factor,
         "feed_factor": result.feed_factor,
+        "computed_at": now.isoformat(),
     }
 
     # What yesterday asked for, kept on yesterday's page.
@@ -556,6 +557,12 @@ INDEX = """<!doctype html>
     async callWS(msg) {
       if (msg.type === "hosekeeper/fields") return Object.values(snapshots).map((s) => ({ zone_id: s.zone_id, name: s.field.name }));
       if (msg.type === "hosekeeper/field") return snapshots[msg.zone_id];
+      if (msg.type === "hosekeeper/recompute") {
+        // Nothing to work out in a preview; the stamp moves so the footer can be seen to.
+        const at = new Date().toISOString();
+        for (const snapshot of Object.values(snapshots)) snapshot.state.computed_at = at;
+        return { computed_at: at };
+      }
       if (msg.type === "hosekeeper/log") {
         // The preview writes to its own copy so the button can be tried: the row moves to
         // "logged today" exactly as it would on the box, and is gone on the next rebuild.

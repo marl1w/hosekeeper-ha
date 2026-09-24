@@ -770,13 +770,16 @@ if (!Panel) {
   console.error("  the panel did not register itself");
   failed = 1;
 } else {
+  const asked = [];
   const hass = {
     language: "it",
     locale: { language: "it" },
     states: {},
     callWS: async (msg) => {
+      asked.push(msg.type);
       if (msg.type === "hosekeeper/fields") return snapshots.map((s) => ({ zone_id: s.zone_id, name: s.field.name }));
       if (msg.type === "hosekeeper/field") return byId.get(msg.zone_id);
+      if (msg.type === "hosekeeper/recompute") return { computed_at: new Date().toISOString() };
       throw new Error(`unknown ${msg.type}`);
     },
   };
@@ -813,6 +816,58 @@ if (!Panel) {
     }
     if (!["overview", "tracking"].includes(mode) && !content.findAll(byClass("chart")).length) {
       console.error(`  panel in ${mode}: no charts`);
+      failed = 1;
+    }
+    // Every tab says how fresh it is, at the bottom, and "null" is not a time.
+    const footer = content.findAll(byClass("freshness")).at(-1);
+    if (!footer || !footer.textContent.includes("Ultimo ricalcolo")) {
+      console.error(`  panel in ${mode}: no line saying when it was last recalculated`);
+      failed = 1;
+    }
+    if (text.includes("null")) {
+      console.error(`  panel in ${mode}: prints "null"`);
+      failed = 1;
+    }
+  }
+
+  // The header button asks first, then recalculates and reloads; reloading alone changed
+  // nothing, and recalculating unasked re-decides watering times somebody may have keyed in.
+  {
+    const panel = new Panel();
+    panel.connectedCallback();
+    panel.hass = hass;
+    for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    const settle = async () => {
+      for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    const modal = () => panel._askLayer.find(byClass("modal"));
+
+    asked.length = 0;
+    panel._refreshBtn.click();
+    if (!modal() || modal().hidden) {
+      console.error("  the refresh button did not ask before recalculating");
+      failed = 1;
+    }
+    // A redraw while the question is open must not take it away.
+    panel._render();
+    await settle();
+    if (!modal() || modal().hidden) {
+      console.error("  a redraw closed the recalculation question");
+      failed = 1;
+    }
+    // Cancel is the first of the two, and it recalculates nothing.
+    modal().findAll(byClass("rate__btn"))[0].click();
+    await settle();
+    if (asked.includes("hosekeeper/recompute") || !modal().hidden) {
+      console.error("  cancelling still recalculated, or left the question open");
+      failed = 1;
+    }
+
+    panel._refreshBtn.click();
+    modal().find(byClass("rate__btn--primary")).click();
+    await settle();
+    if (asked[0] !== "hosekeeper/recompute" || !asked.includes("hosekeeper/field")) {
+      console.error(`  confirming asked for ${asked.join(", ")}, expected a recompute and then the lawns`);
       failed = 1;
     }
   }

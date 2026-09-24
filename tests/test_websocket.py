@@ -301,3 +301,60 @@ async def test_marking_the_seedbed_watering_done_closes_it(
         for item in state["agenda"]
         if item["date"] == today and item["code"] == "germination_watering"
     ]
+
+
+async def test_recompute_reopens_what_is_settled_and_says_when(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    field_data: dict[str, Any],
+    freezer,
+) -> None:
+    """The panel's button works everything out again, the way a reload does.
+
+    A refresh recomputes from the diary but keeps the day's irrigation plan on purpose, so
+    the forecast cannot wobble it. A person asking is not the forecast, and gets a new one.
+    """
+    entry = await _setup(hass, field_data)
+    zone = only_zone(entry)
+    before = zone.coordinator.data.computed_at
+    assert before
+
+    page = zone.diary.today()
+    page["irrigation_plan"]["reasons"] = ["settled_marker"]
+    await zone.coordinator.async_refresh()
+    assert page["irrigation_plan"]["reasons"] == ["settled_marker"], "a refresh keeps it"
+
+    freezer.tick(dt.timedelta(minutes=5))
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "hosekeeper/recompute"})
+    result = await client.receive_json()
+    assert result["success"], result
+    assert "settled_marker" not in zone.diary.today()["irrigation_plan"]["reasons"]
+    assert zone.coordinator.data.computed_at > before
+    assert result["result"]["computed_at"] >= zone.coordinator.data.computed_at
+
+
+async def test_recompute_leaves_a_watering_under_way_alone(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator, field_data: dict[str, Any]
+) -> None:
+    """Water already on the lawn cannot be decided again."""
+    entry = await _setup(hass, field_data)
+    zone = only_zone(entry)
+    now = dt_util.now()
+    page = zone.diary.today()
+    page["irrigation_plan"]["reasons"] = ["settled_marker"]
+    page["irrigation_plan"]["germination"] = []
+    page["irrigation_plan"]["cycles"] = [
+        {
+            "start": (now - dt.timedelta(minutes=10)).isoformat(),
+            "end": (now + dt.timedelta(minutes=20)).isoformat(),
+            "mm": 5.0,
+            "minutes": 20,
+        }
+    ]
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "hosekeeper/recompute"})
+    result = await client.receive_json()
+    assert result["success"], result
+    assert "settled_marker" in zone.diary.today()["irrigation_plan"]["reasons"]

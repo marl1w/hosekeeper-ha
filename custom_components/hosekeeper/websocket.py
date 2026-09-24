@@ -8,6 +8,10 @@ done. It is here rather than left to the services because the panel is where the
 named — the button sits on the line that says the lawn wants mowing — and because a
 confirmation that had to be composed as a service call is a confirmation nobody makes. The
 services stay for automations, which have the reverse need.
+
+And one command that writes nothing: asking every lawn to be worked out again, now, the way
+a reload would, for the moment somebody wants to see the engine's answer to a change rather
+than wait up to an hour for it.
 """
 
 from __future__ import annotations
@@ -43,6 +47,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_fields)
     websocket_api.async_register_command(hass, ws_field)
     websocket_api.async_register_command(hass, ws_log)
+    websocket_api.async_register_command(hass, ws_recompute)
 
 
 def _entries(hass: HomeAssistant):
@@ -222,3 +227,26 @@ async def ws_log(
         connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
         return
     connection.send_result(msg["id"], field_snapshot(hass, entry, zone))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/recompute"})
+@websocket_api.async_response
+async def ws_recompute(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Work every lawn out again now, settled plans included, and say when that was.
+
+    Every zone is opened up before any is refreshed, because the zones of a lawn share a
+    valve queue and a seedbed clock: one refreshed while its neighbours still hold their
+    old bookings would plan around water that is about to be decided again. Then they are
+    refreshed twice. The first round has each zone publish what it would ask for alone;
+    the second lets them agree on it, which is what a restart gets over its first hour.
+    """
+    found = zones(hass)
+    now = dt_util.now()
+    for _, zone in found:
+        zone.coordinator.unsettle(now)
+    for _ in range(2):
+        for _, zone in found:
+            await zone.coordinator.async_refresh()
+    connection.send_result(msg["id"], {"computed_at": dt_util.now().isoformat()})

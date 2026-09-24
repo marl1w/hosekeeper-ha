@@ -161,6 +161,14 @@ view, and in the Tracking tab. It writes through one websocket command, `hosekee
 zone's fresh snapshot so the panel redraws from truth rather than guessing what changed. The
 services below stay for automations, which have the reverse need.
 
+**The header's refresh button recalculates**, after asking: it can re-decide watering times
+somebody has already keyed into a controller. `hosekeeper/recompute` opens up what a refresh
+keeps settled — the month's plan and the day's irrigation plan, unless its water is already
+running — then refreshes every zone twice, so the zones of a lawn publish and then agree their
+seedbed hours, the way a reload does. The panel reloads the snapshots after it. Each snapshot
+carries `computed_at`, and every tab ends with the oldest of them: the page is only as fresh
+as its stalest lawn.
+
 Services: `hosekeeper.log_irrigation`, `hosekeeper.log_maintenance` (type, fertilizer product,
 amount, cut height, notes), `hosekeeper.log_issue` (issue tags). These carry the details the
 buttons cannot. `hosekeeper.import_weather` enters one past day as it was measured, through

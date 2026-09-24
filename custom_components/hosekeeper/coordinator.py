@@ -155,6 +155,8 @@ class FieldState:
     activity_details: dict[str, Any] = dc_field(default_factory=dict)
     logged_today: list[str] = dc_field(default_factory=list)
     """The kinds of work today's diary page already records."""
+    computed_at: str | None = None
+    """When the engine last worked this out, so the panel can say how fresh it is."""
 
     @property
     def next_action(self) -> str | None:
@@ -366,6 +368,35 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
         """Tag today with a problem seen on the lawn."""
         self.diary.add_issue(issue)
         await self._commit()
+
+    def unsettle(self, now: dt.datetime | None = None) -> None:
+        """Open up what the engine keeps settled, so the next refresh decides it all again.
+
+        Asked for from the panel. A refresh already recomputes everything from the diary and
+        the weather; what it does not do is overturn the two things kept on purpose -- the
+        month's plan and the day's irrigation plan, which would otherwise wobble with every
+        change in the forecast. Somebody pressing a button is not the forecast changing, it
+        is the same moment a reload is, and gets the same answer without the reload.
+
+        A watering already under way is left alone: it cannot be taken back, and deciding it
+        again would give the valve a second plan for water that is already on the lawn.
+        """
+        now = now or dt_util.now()
+        self.diary.plan.pop("generated", None)
+        today = self.diary.day(self.diary.today_key(now))
+        stored = today.get("irrigation_plan")
+        if not stored:
+            return
+        try:
+            plan = schedule.IrrigationPlan.from_dict(stored)
+        except (KeyError, TypeError, ValueError):
+            plan = None
+        if plan is not None:
+            first = _first_start(plan)
+            if first is not None and now >= first:
+                return
+        today.pop("irrigation_plan", None)
+        self._chain().get(stored.get("date") or "", {}).pop(self.zone_id, None)
 
     async def _commit(self) -> None:
         await self.diary.async_save()
@@ -885,6 +916,7 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             activity=doing.state,
             activity_details=doing.details,
             logged_today=sorted(logged),
+            computed_at=now.isoformat(),
         )
 
     # ------------------------------------------------------------------ the day's timing
@@ -936,11 +968,7 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
                 # A seedbed day is judged on its passes, which are its whole watering, and it
                 # has started once the first of them has: the same test, on the regime the day
                 # is actually on rather than on a dawn cycle it does not have.
-                first_start = (
-                    current.germination[0].start
-                    if current.seedbed_day and current.germination
-                    else current.main_start
-                )
+                first_start = _first_start(current)
                 wanted = result.seedbed_target_mm if current.seedbed_day else needed_mm
                 running = first_start is not None and now >= first_start
                 rate = self.field.application_rate_mm_h
@@ -1328,6 +1356,11 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
 
 
 # ---------------------------------------------------------------------- helpers
+
+
+def _first_start(plan: schedule.IrrigationPlan) -> dt.datetime | None:
+    """Return when a plan's watering begins: its first pass on a seedbed day, else its cycle."""
+    return plan.germination[0].start if plan.seedbed_day and plan.germination else plan.main_start
 
 
 def _to_float(value: Any) -> float | None:

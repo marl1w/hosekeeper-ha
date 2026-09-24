@@ -10,7 +10,7 @@
 import { adoptStyles, clear, el, frameDebounce, icon } from "./dom.js";
 import { SHARED } from "./theme.js";
 import { HosekeeperApi } from "./api.js";
-import { fill, fmtDate, fmtMonth, pickLocale } from "./format.js";
+import { fill, fmtDate, fmtMonth, fmtTime, pickLocale } from "./format.js";
 import { pickLanguage, strings } from "./i18n.js";
 import { renderNow } from "./views/now.js";
 import { isoDay, parseDay, renderAgenda, renderMonthGrid, weekLabel } from "./views/calendar.js";
@@ -20,6 +20,7 @@ import { zoneBadge } from "./views/events.js";
 import { CATEGORY_ORDER, datedOnly, mergeEvents } from "./merge.js";
 import { renderDayDetail } from "./views/day-detail.js";
 import { renderTrend } from "./views/trend.js";
+import { dialog } from "./views/dialog.js";
 
 // Lawn colours, kept clear of the job colours in theme.js so a lawn is never read as a job.
 const ZONE_COLOURS = ["#6c5ce7", "#00a3a3", "#d6336c", "#8b5e00", "#5f3dc4", "#0b7285"];
@@ -78,6 +79,11 @@ const STYLES = /* css */ `
 
 .content { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 18px 20px; padding-bottom: calc(28px + var(--hk-safe-bottom)); }
 .content > .page { max-width: 1040px; }
+/* How fresh the page is, under whatever the tab drew. Quiet, because it is a footnote. */
+.freshness { max-width: 1040px; margin-top: 20px; text-align: center; font-size: 0.78rem; color: var(--hk-text-dim); }
+.modal__text { font-size: 0.9rem; line-height: 1.45; color: var(--hk-text-dim); margin: 0; }
+.icon-btn--busy .icon { animation: hk-spin 900ms linear infinite; }
+@keyframes hk-spin { to { transform: rotate(360deg); } }
 @media (max-width: 700px) {
   .app-header { height: 44px; padding-right: 4px; }
   .toolbar { padding: 8px 12px; gap: 8px; }
@@ -184,7 +190,10 @@ class HosekeeperPanel extends HTMLElement {
       this._menuBtn,
       el("div", { class: "app-header__title" }, "Hosekeeper"),
       el("div", { class: "spacer" }),
-      el("button", { class: "icon-btn", onClick: () => this._loadAll() }, icon("mdi:refresh"))
+      // Recalculates, then reloads. Reloading alone only fetched what the engine had already
+      // concluded, and a button that looks like "do it again" and changes nothing is worse
+      // than no button.
+      (this._refreshBtn = el("button", { class: "icon-btn", onClick: () => this._askRecompute() }, icon("mdi:refresh")))
     );
     this._toolbar = el("div", { class: "toolbar" });
     this._content = el("main", { class: "content" });
@@ -192,7 +201,11 @@ class HosekeeperPanel extends HTMLElement {
     // against the whole scroll height, so they opened halfway down the page and ran off the
     // bottom of the window.
     this._layer = el("div", { class: "layer" });
-    this.shadowRoot.append(this._header, this._toolbar, this._content, this._layer);
+    // The recalculation's question has a layer of its own. Every redraw empties the other
+    // one, and Home Assistant redraws the page whenever a lawn is recomputed -- which on a
+    // weather station is every few minutes, long enough to lose a dialog mid-sentence.
+    this._askLayer = el("div", { class: "layer" });
+    this.shadowRoot.append(this._header, this._toolbar, this._content, this._layer, this._askLayer);
   }
 
   // ------------------------------------------------------------------ data
@@ -214,6 +227,69 @@ class HosekeeperPanel extends HTMLElement {
     await Promise.all(this._fields.map((f) => this._loadField(f.zone_id)));
     this._loaded = true;
     this._render();
+  }
+
+  /**
+   * Ask before recalculating.
+   *
+   * It is not a destructive button, but it is not a harmless one either: it re-decides the
+   * day's watering times, and somebody who has just keyed them into a controller wants to
+   * know that before the page offers them different ones.
+   */
+  _askRecompute() {
+    if (this._recomputing) return;
+    const s = strings(pickLanguage(this._hass));
+    const { overlay } = dialog({
+      lang: pickLanguage(this._hass),
+      title: s.ui.recalculateTitle,
+      openLabel: "",
+      openIcon: "mdi:refresh",
+      submitLabel: s.ui.recalculateGo,
+      body: [el("p", { class: "modal__text" }, s.ui.recalculateBody)],
+      onSubmit: () => {
+        this._recompute();
+      },
+    });
+    clear(this._askLayer);
+    this._askLayer.append(overlay);
+    overlay.hidden = false;
+  }
+
+  async _recompute() {
+    if (this._recomputing) return;
+    this._recomputing = true;
+    this._refreshBtn.disabled = true;
+    this._refreshBtn.classList.add("icon-btn--busy");
+    this._render();
+    try {
+      await this._api.recompute();
+    } catch (err) {
+      // Still reload: whatever the engine managed is better shown than the page as it was.
+      console.error("hosekeeper: recompute", err);
+    } finally {
+      await this._loadAll();
+      this._recomputing = false;
+      this._refreshBtn.disabled = false;
+      this._refreshBtn.classList.remove("icon-btn--busy");
+      this._render();
+    }
+  }
+
+  /**
+   * When the lawns on screen were last worked out.
+   *
+   * The oldest of them, because the page is only as fresh as its stalest lawn: zones refresh
+   * one at a time, and "09:42" under a page with one zone still on 08:42 would be a claim
+   * about the page that is not true of all of it.
+   */
+  _freshness(snapshots, s, locale) {
+    if (this._recomputing) return el("div", { class: "freshness" }, s.ui.recalculating);
+    const stamps = snapshots.map((snap) => snap?.state?.computed_at).filter(Boolean).sort();
+    if (!stamps.length) return el("div", { class: "freshness" });
+    const oldest = stamps[0];
+    const time = fmtTime(oldest, locale);
+    const when = isoDay(new Date(oldest)) === isoDay(new Date()) ? time : `${fmtDate(oldest, locale, { day: "numeric", month: "short" })} ${time}`;
+    return el("div", { class: "freshness" }, fill(s.ui.computedAt, { when }, locale));
   }
 
   async _loadField(zoneId) {
@@ -436,6 +512,8 @@ class HosekeeperPanel extends HTMLElement {
     const locale = pickLocale(this._hass, lang);
     const s = strings(lang);
     this._menuBtn.hidden = !this._narrow;
+    this._refreshBtn.title = s.ui.recalculate;
+    this._refreshBtn.setAttribute("aria-label", s.ui.recalculate);
     this._renderToolbar(lang, locale);
 
     clear(this._content);
@@ -452,6 +530,7 @@ class HosekeeperPanel extends HTMLElement {
       this._content.append(el("div", { class: "empty" }, el("div", { class: "empty__body" }, body)));
       return;
     }
+    const freshness = this._freshness(snapshots, s, locale);
     const byDay = this._eventsByDay();
     const today = isoDay(new Date());
     const multiZone = this._fields.length > 1 && this._zone === null;
@@ -532,7 +611,8 @@ class HosekeeperPanel extends HTMLElement {
             this._anchor = iso;
             this._setMode("day");
           },
-        })
+        }),
+        freshness
       );
       return;
     }
@@ -550,7 +630,7 @@ class HosekeeperPanel extends HTMLElement {
         onRecord: this._record,
         onFeed: this._feed,
       });
-      this._content.append(tracking);
+      this._content.append(tracking, freshness);
       this._layer.append(...(tracking.dialogs || []));
       return;
     }
@@ -576,7 +656,8 @@ class HosekeeperPanel extends HTMLElement {
         calendar ? el("section", { class: "section enter" }, calendar) : null,
         renderDayDetail(this._mode === "day" ? this._anchor : this._selected, work.get(this._mode === "day" ? this._anchor : this._selected) || [], shared),
         trendSection
-      )
+      ),
+      freshness
     );
   }
 }
