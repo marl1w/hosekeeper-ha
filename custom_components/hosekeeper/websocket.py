@@ -48,6 +48,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_field)
     websocket_api.async_register_command(hass, ws_log)
     websocket_api.async_register_command(hass, ws_recompute)
+    websocket_api.async_register_command(hass, ws_subscribe)
 
 
 def _entries(hass: HomeAssistant):
@@ -250,3 +251,37 @@ async def ws_recompute(
         for _, zone in found:
             await zone.coordinator.async_refresh()
     connection.send_result(msg["id"], {"computed_at": dt_util.now().isoformat()})
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/subscribe"})
+@callback
+def ws_subscribe(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Tell the panel each time a zone has been worked out, whatever the result was.
+
+    The sensors say so only when their values move, and most refreshes reach the advice
+    they reached an hour ago. This says it every time, so "last recalculated" is true.
+    """
+    unsubscribes = []
+    for _, zone in zones(hass):
+
+        @callback
+        def _updated(zone=zone) -> None:
+            state = zone.coordinator.data
+            connection.send_message(
+                websocket_api.event_message(
+                    msg["id"],
+                    {"zone_id": zone.zone_id, "computed_at": state.computed_at if state else None},
+                )
+            )
+
+        unsubscribes.append(zone.coordinator.async_add_listener(_updated))
+
+    @callback
+    def _unsubscribe() -> None:
+        for unsubscribe in unsubscribes:
+            unsubscribe()
+
+    connection.subscriptions[msg["id"]] = _unsubscribe
+    connection.send_result(msg["id"])

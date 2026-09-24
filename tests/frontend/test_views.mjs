@@ -872,6 +872,40 @@ if (!Panel) {
     }
   }
 
+  // A recalculation in the background moves the footer, and only the footer: a redraw
+  // every few minutes would close a dialog somebody was halfway through.
+  {
+    let push = null;
+    const listening = {
+      ...hass,
+      connection: {
+        subscribeMessage: async (callback, msg) => {
+          if (msg.type === "hosekeeper/subscribe") push = callback;
+          return () => {};
+        },
+      },
+    };
+    const panel = new Panel();
+    panel.connectedCallback();
+    panel.hass = listening;
+    for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    if (!push) {
+      console.error("  the panel does not listen for recalculations");
+      failed = 1;
+    } else {
+      const footer = panel._freshnessEl;
+      const before = footer.textContent;
+      const later = new Date(Date.now() + 3 * 3600 * 1000);
+      later.setMinutes(17);
+      asked.length = 0;
+      for (const snapshot of snapshots) push({ zone_id: snapshot.zone_id, computed_at: later.toISOString() });
+      if (panel._freshnessEl !== footer || footer.textContent === before || asked.length) {
+        console.error(`  a background recalculation should move the footer in place (was "${before}", now "${footer.textContent}", asked ${asked.join(", ")})`);
+        failed = 1;
+      }
+    }
+  }
+
   // The list under the calendar shows the selected day. Paging used to move only the anchor,
   // so the grid went to October while the list below stayed on a day in September.
   {

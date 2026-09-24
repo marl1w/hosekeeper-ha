@@ -80,7 +80,7 @@ const STYLES = /* css */ `
 .content { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 18px 20px; padding-bottom: calc(28px + var(--hk-safe-bottom)); }
 .content > .page { max-width: 1040px; }
 /* How fresh the page is, under whatever the tab drew. Quiet, because it is a footnote. */
-.freshness { max-width: 1040px; margin-top: 20px; text-align: center; font-size: 0.78rem; color: var(--hk-text-dim); }
+.freshness { max-width: 880px; margin: 20px auto 0; text-align: center; font-size: 0.78rem; color: var(--hk-text-dim); }
 .modal__text { font-size: 0.9rem; line-height: 1.45; color: var(--hk-text-dim); margin: 0; }
 .icon-btn--busy .icon { animation: hk-spin 900ms linear infinite; }
 @keyframes hk-spin { to { transform: rotate(360deg); } }
@@ -150,6 +150,7 @@ class HosekeeperPanel extends HTMLElement {
     this._api = new HosekeeperApi(hass);
     if (previous === null) {
       this._loadAll();
+      this._subscribe();
       this._render();
       return;
     }
@@ -177,7 +178,42 @@ class HosekeeperPanel extends HTMLElement {
 
   connectedCallback() {
     this._build();
+    this._subscribe();
     this._render();
+  }
+
+  disconnectedCallback() {
+    this._unsubscribe?.then((off) => off?.()).catch(() => {});
+    this._unsubscribe = null;
+  }
+
+  /**
+   * Hear every recalculation, including the ones that conclude nothing new.
+   *
+   * The snapshots are refetched when the next-action sensor changes, and Home Assistant only
+   * counts a sensor as changed when its value or attributes did. The engine refreshes every
+   * hour and at every station reading, and most of those refreshes reach the same advice: the
+   * footer would go on saying 08:42 while the engine had been working all morning. So the
+   * integration says when each zone was worked out, and the panel moves the footer alone --
+   * a whole redraw every few minutes would close a dialog somebody is halfway through.
+   */
+  _subscribe() {
+    if (this._unsubscribe || !this._hass?.connection?.subscribeMessage) return;
+    this._unsubscribe = this._hass.connection
+      .subscribeMessage((event) => this._recomputed(event), { type: "hosekeeper/subscribe" })
+      .catch((err) => {
+        console.error("hosekeeper: subscribe", err);
+        this._unsubscribe = null;
+      });
+  }
+
+  _recomputed({ zone_id: zoneId, computed_at: computedAt } = {}) {
+    const snapshot = this._snapshots.get(zoneId);
+    if (!snapshot?.state || !computedAt) return;
+    snapshot.state.computed_at = computedAt;
+    if (!this._freshnessEl || this._recomputing) return;
+    const lang = pickLanguage(this._hass);
+    this._freshnessEl.textContent = this._freshnessText(this._visibleSnapshots(), strings(lang), pickLocale(this._hass, lang));
   }
 
   _build() {
@@ -283,13 +319,19 @@ class HosekeeperPanel extends HTMLElement {
    * about the page that is not true of all of it.
    */
   _freshness(snapshots, s, locale) {
-    if (this._recomputing) return el("div", { class: "freshness" }, s.ui.recalculating);
-    const stamps = snapshots.map((snap) => snap?.state?.computed_at).filter(Boolean).sort();
-    if (!stamps.length) return el("div", { class: "freshness" });
+    this._freshnessEl = el("div", { class: "freshness" }, this._freshnessText(snapshots, s, locale));
+    return this._freshnessEl;
+  }
+
+  _freshnessText(snapshots, s, locale) {
+    if (this._recomputing) return s.ui.recalculating;
+    // Compared as instants, not as strings: two zones can carry different UTC offsets.
+    const stamps = snapshots.map((snap) => snap?.state?.computed_at).filter(Boolean).sort((a, b) => new Date(a) - new Date(b));
+    if (!stamps.length) return "";
     const oldest = stamps[0];
     const time = fmtTime(oldest, locale);
     const when = isoDay(new Date(oldest)) === isoDay(new Date()) ? time : `${fmtDate(oldest, locale, { day: "numeric", month: "short" })} ${time}`;
-    return el("div", { class: "freshness" }, fill(s.ui.computedAt, { when }, locale));
+    return fill(s.ui.computedAt, { when }, locale);
   }
 
   async _loadField(zoneId) {

@@ -358,3 +358,27 @@ async def test_recompute_leaves_a_watering_under_way_alone(
     result = await client.receive_json()
     assert result["success"], result
     assert "settled_marker" in zone.diary.today()["irrigation_plan"]["reasons"]
+
+
+async def test_the_panel_hears_every_recalculation_even_one_that_changes_nothing(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    field_data: dict[str, Any],
+    freezer,
+) -> None:
+    """The sensors only move when their values do; "last recalculated" has to move anyway."""
+    entry = await _setup(hass, field_data)
+    zone = only_zone(entry)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "hosekeeper/subscribe"})
+    result = await client.receive_json()
+    assert result["success"], result
+
+    freezer.tick(dt.timedelta(minutes=5))
+    await zone.coordinator.async_refresh()
+    event = await client.receive_json()
+    assert event["type"] == "event"
+    assert event["event"] == {
+        "zone_id": zone.zone_id,
+        "computed_at": zone.coordinator.data.computed_at,
+    }

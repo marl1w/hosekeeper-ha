@@ -167,7 +167,10 @@ keeps settled — the month's plan and the day's irrigation plan, unless its wat
 running — then refreshes every zone twice, so the zones of a lawn publish and then agree their
 seedbed hours, the way a reload does. The panel reloads the snapshots after it. Each snapshot
 carries `computed_at`, and every tab ends with the oldest of them: the page is only as fresh
-as its stalest lawn.
+as its stalest lawn. `hosekeeper/subscribe` pushes each zone's `computed_at` whenever it is
+worked out, because the sensors only change when their values do and most refreshes reach the
+same advice; the panel moves the footer's text in place rather than redrawing, so a dialog
+left open is not closed by the weather station reporting.
 
 Services: `hosekeeper.log_irrigation`, `hosekeeper.log_maintenance` (type, fertilizer product,
 amount, cut height, notes), `hosekeeper.log_issue` (issue tags). These carry the details the
