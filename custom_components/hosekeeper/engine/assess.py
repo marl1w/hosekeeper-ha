@@ -332,6 +332,33 @@ def observe(
     return record
 
 
+def rebalance(lawn: Lawn, days: dict[str, Any], start: dt.date, until: dt.date) -> None:
+    """Carry the balance forward again from `start`, after a past day's water has changed.
+
+    Each day's deficit is the day before's plus what it used, less what it was given, so a
+    watering written onto last Tuesday is wrong about every day since until they are carried
+    through again. The day's own use is kept as it was measured: only the water moved.
+    """
+    day = start
+    while day <= until:
+        key = day.isoformat()
+        record = days.get(key)
+        if record is not None and record.get("etc_mm") is not None:
+            soil, _ = soil_for(lawn, days, day)
+            carried = last_deficit(days, key)
+            record["deficit_mm"] = round(
+                water.next_deficit(
+                    0.0 if carried is None else carried,
+                    float(record["etc_mm"]),
+                    record.get("rain_mm", 0.0),
+                    record.get("irrigation_mm", 0.0),
+                    soil,
+                ),
+                2,
+            )
+        day += dt.timedelta(days=1)
+
+
 def assess(
     lawn: Lawn,
     days: dict[str, Any],

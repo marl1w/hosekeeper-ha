@@ -41,6 +41,7 @@ from homeassistant.util.unit_conversion import (
 from .const import DOMAIN
 from .diary import DayRecord, Diary
 from .engine import activity as activity_engine, agenda, assess, dew, et, schedule
+from .engine.knowledge import programme
 from .field import FieldConfig
 
 _LOGGER = logging.getLogger(__name__)
@@ -249,6 +250,7 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
             )
         # Whatever the sensors say right now is the first sample of the day.
         self._sample_observations(dt_util.now())
+        self._credit_confirmed_seedbeds()
 
     async def async_shutdown(self) -> None:
         """Stop listening and flush the diary. Safe to call twice: a reload does."""
@@ -362,7 +364,88 @@ class HosekeeperCoordinator(DataUpdateCoordinator[FieldState]):
         which matters either side of midnight.
         """
         self.diary.add_maintenance(kind, at=at, details=details)
+        if kind == "seedbed_watering":
+            day = dt_util.as_local(at).date() if at else dt_util.now().date()
+            if self._credit_seedbed(day):
+                assess.rebalance(self._lawn(), self.diary.days, day, dt_util.now().date())
         await self._commit()
+
+    def _credit_seedbed(self, day: dt.date) -> bool:
+        """Put a day's seedbed passes, confirmed by hand, into the diary as the water they were.
+
+        Done on the seedbed line used to be recorded as work and nothing else, on the view
+        that its passes only wet the surface. Over a patch of seed in standing turf they do,
+        and the dawn cycle is still filling the root zone. On a lawn sown all over there is no
+        dawn cycle: the passes are the whole of the day's watering, and a balance that never
+        heard of them believed the lawn had gone a fortnight dry -- and asked for more passes
+        every day to make up for water it had in fact been given. The valve's runs were
+        already credited this way; a hand on the hose was not.
+
+        Returns whether the balance was changed. Once per day, because a second Done is
+        somebody amending the first rather than watering twice; and never where a valve is
+        wired, because the valve has already written down what it ran.
+        """
+        if self.field.valve_entity:
+            return False
+        page = self.diary.day(day.isoformat())
+        if "seedbed_credit_mm" in page:
+            return False
+        plan = self._plan_for(day)
+        if plan is None or not plan.germination:
+            return False
+        mm = plan.seedbed_mm
+        minutes = float(sum(cycle.minutes for cycle in plan.germination))
+        page["seedbed_credit_mm"] = mm
+        if plan.seedbed_day:
+            page["irrigation_min"] = page.get("irrigation_min", 0.0) + minutes
+            page["irrigation_mm"] = page.get("irrigation_mm", 0.0) + mm
+            page["irrigation_source"] = "manual"
+            return True
+        page["seedbed_min"] = page.get("seedbed_min", 0.0) + minutes
+        page["seedbed_mm"] = page.get("seedbed_mm", 0.0) + mm
+        page["seedbed_source"] = "manual"
+        return False
+
+    def _plan_for(self, day: dt.date) -> schedule.IrrigationPlan | None:
+        """Return the irrigation plan that covered a day, wherever it was filed.
+
+        A plan is decided the day before and filed on that day's page, so the one covering a
+        day is on the page before it, or on its own when it was decided again that morning.
+        """
+        wanted = day.isoformat()
+        for offset in (0, 1):
+            stored = self.diary.days.get((day - dt.timedelta(days=offset)).isoformat(), {})
+            stored = stored.get("irrigation_plan")
+            if not stored or stored.get("date") != wanted:
+                continue
+            try:
+                return schedule.IrrigationPlan.from_dict(stored)
+            except (KeyError, TypeError, ValueError):
+                return None
+        return None
+
+    def _credit_confirmed_seedbeds(self) -> None:
+        """Credit the seedbed days confirmed before confirmations were credited at all.
+
+        A one-off repair, safe to run on every start: each day it credits is marked, so it is
+        never counted twice. The fortnight a seedbed lasts is as far back as it looks, since
+        a confirmation older than that belongs to a sowing that no longer shapes anything.
+        """
+        today = dt_util.now().date()
+        earliest: dt.date | None = None
+        for back in range(programme.SEED_GERMINATION_DAYS + 7, 0, -1):
+            day = today - dt.timedelta(days=back)
+            entries = self.diary.days.get(day.isoformat(), {}).get("maintenance", [])
+            if not any(
+                item.get("type") == "seedbed_watering" and item.get("source") == "manual"
+                for item in entries
+            ):
+                continue
+            if self._credit_seedbed(day) and earliest is None:
+                earliest = day
+        if earliest is not None:
+            assess.rebalance(self._lawn(), self.diary.days, earliest, today)
+            self.diary.schedule_save()
 
     async def async_log_issue(self, issue: str) -> None:
         """Tag today with a problem seen on the lawn."""

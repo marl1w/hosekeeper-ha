@@ -1269,3 +1269,92 @@ async def test_a_lawns_zones_water_at_one_set_of_hours_and_differ_in_run_length(
     # And the water each zone actually needs, taken as a run length rather than as an hour.
     minutes = [[c["minutes"] for c in plan["germination"]] for plan in plans]
     assert all(len(set(each)) == 1 for each in minutes), "one run length per zone for the day"
+
+
+async def _sown_by_hand(
+    hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
+) -> tuple[MockConfigEntry, dt.date, float]:
+    """Set up a lawn watered with a hose, sow it all over, and return its first seedbed day."""
+    data = field_data | {
+        CONF_TEMPERATURE_SENSOR: TEMP,
+        CONF_HUMIDITY_SENSOR: RH,
+        CONF_WIND_SENSOR: WIND,
+        CONF_SOLAR_SENSOR: SOLAR,
+    }
+    data.pop(CONF_VALVE_ENTITY, None)
+    lawn, zone_data = split(data)
+    entry = make_entry(hass, lawn, [zone_data])
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    zone = only_zone(entry)
+    await hass.services.async_call(
+        DOMAIN, "log_sowing", {"zone_id": zone.zone_id, "kind": "overseed"}, blocking=True
+    )
+    zone.diary.today().pop("irrigation_plan", None)
+    await zone.coordinator.async_refresh()
+    await _settle(hass, freezer)
+    plan = schedule.IrrigationPlan.from_dict(zone.diary.today()["irrigation_plan"])
+    assert plan.seedbed_day and plan.germination
+    return entry, plan.date, plan.seedbed_mm
+
+
+@pytest.mark.usefixtures("weather_service", "station")
+async def test_a_seedbed_watered_by_hand_is_credited_when_it_is_confirmed(
+    hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
+) -> None:
+    """On a lawn sown all over, the passes are the day's watering, whoever turned the tap.
+
+    Done used to write the job and no water, so the balance went on believing the lawn had
+    had nothing, and every day asked for more passes to make up for water it had been given.
+    """
+    entry, day, mm = await _sown_by_hand(hass, field_data, freezer)
+    zone = only_zone(entry)
+    freezer.move_to(
+        dt.datetime.combine(day, dt.time(17, 0), tzinfo=dt_util.get_default_time_zone())
+    )
+    await zone.coordinator.async_refresh()
+    before = zone.diary.day(day.isoformat()).get("deficit_mm")
+
+    await zone.coordinator.async_log_maintenance("seedbed_watering")
+    page = zone.diary.day(day.isoformat())
+    assert page.get("irrigation_mm") == pytest.approx(mm)
+    assert page["deficit_mm"] < before
+
+    # A second Done amends the first; it is not a second watering.
+    await zone.coordinator.async_log_maintenance("seedbed_watering")
+    assert zone.diary.day(day.isoformat()).get("irrigation_mm") == pytest.approx(mm)
+
+
+@pytest.mark.usefixtures("weather_service", "station")
+async def test_seedbed_days_confirmed_before_the_fix_are_credited_once(
+    hass: HomeAssistant, field_data: dict[str, Any], freezer: FrozenDateTimeFactory
+) -> None:
+    """The fortnight already confirmed is repaired on the next start, and only once."""
+    entry, day, mm = await _sown_by_hand(hass, field_data, freezer)
+    freezer.move_to(
+        dt.datetime.combine(day, dt.time(17, 0), tzinfo=dt_util.get_default_time_zone())
+    )
+    diary = only_zone(entry).diary
+    # Written the way the old Done wrote it: the job, and no water.
+    diary.add_maintenance("seedbed_watering")
+    freezer.tick(dt.timedelta(days=1))
+
+    for _ in range(2):
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+        page = only_zone(entry).diary.day(day.isoformat())
+        assert page.get("irrigation_mm") == pytest.approx(mm)
+
+
+@pytest.mark.usefixtures("weather_service", "station")
+async def test_a_valve_lawns_seedbed_is_not_credited_twice(
+    hass: HomeAssistant, field_data: dict[str, Any]
+) -> None:
+    """The valve already wrote down what it ran; Done on top of it is not more water."""
+    entry = await _setup(hass, field_data)
+    zone = only_zone(entry)
+    await hass.services.async_call(
+        DOMAIN, "log_sowing", {"zone_id": zone.zone_id, "kind": "overseed"}, blocking=True
+    )
+    await zone.coordinator.async_log_maintenance("seedbed_watering")
+    assert not zone.diary.today().get("irrigation_mm")

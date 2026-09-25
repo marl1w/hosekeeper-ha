@@ -612,6 +612,26 @@ which on the reporting lawn is 11:00 with Zone 1's shade — later than the dew,
 A lawn without a pyranometer has no energy balance to run and stays on the rule of thumb;
 humidity alone is no longer consulted for the dew.
 
+### A seedbed watered by hand was never credited — 25 September
+
+Reported from the lawn: a cool, overcast day (ET₀ 1.8 mm) and every zone asked for six passes,
+up to 17.4 mm. On a lawn sown all over the day owes `max(damp-surface floor, root-zone
+deficit)`, and the deficit was 14–17 mm of 20.6. It was not real. Done on the seedbed line had
+been confirmed nearly every day since sowing, and it wrote the job and no water — on the view
+that the passes only wet the surface, which is true over a patch of seed and false on a lawn
+sown all over, where they are the whole of the watering. The valve's runs were already
+credited that way; a hand on the hose was not. So the balance believed the lawn had gone a
+fortnight dry, and asked for more passes each day to make up for water it had been given.
+
+- `_credit_seedbed` now writes a confirmed day's passes, as that day's plan laid them out, into
+  `irrigation_mm` on a seedbed day and `seedbed_mm` otherwise. Once per day (`seedbed_credit_mm`
+  marks it), and never where a valve is wired, since the valve has already written its runs.
+- `assess.rebalance` carries the deficit forward again from a day whose water changed, keeping
+  each day's measured use. Confirming yesterday's passes is otherwise wrong about today.
+- `_credit_confirmed_seedbeds` repairs the days confirmed before this, on start-up, as far back
+  as a seedbed lasts. Replayed on the reporting lawn's diary: 14.4–17.3 mm down becomes
+  1.3–1.5 mm, and a cool day falls back to the floor, three passes of 2 mm.
+
 ### Still open
 
 - The dew store has no fitted parameter. It ignores guttation, and the net longwave is FAO's
